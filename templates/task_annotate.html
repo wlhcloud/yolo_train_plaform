@@ -1,0 +1,905 @@
+{% extends "base.html" %}
+
+{% block title %}标注任务管理 - {{ project.name }} - AI模型训练平台{% endblock %}
+
+{% block extra_css %}
+<style>
+    .annotation-container {
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    #annotationCanvas {
+        max-width: 100%;
+        height: auto;
+        border: 1px solid #ddd;
+        display: block;
+        margin: 0 auto;
+    }
+
+    .annotation-sidebar {
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
+    }
+
+    .canvas-container {
+        position: relative;
+        text-align: center;
+    }
+
+    #fabricCanvas {
+        border: 1px solid #ddd;
+    }
+
+    /* 任务列表样式优化 */
+    .task-table th {
+        white-space: nowrap;
+    }
+
+    .task-actions .btn {
+        padding: 0.2rem 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    /* 弹窗内素材列表样式 */
+    .material-list {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    /* 加载状态提示 */
+    .loading-tip {
+        text-align: center;
+        padding: 1rem;
+        color: #6c757d;
+    }
+
+    /* 选中状态样式 */
+    .task-row.selected {
+        border: 2px solid #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, .25);
+    }
+
+    /* 分页样式 */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        padding: 20px 0;
+    }
+
+    .pagination .page-item {
+        margin: 0 2px;
+    }
+
+    .pagination .page-link {
+        color: #007bff;
+        padding: 0.5rem 0.75rem;
+        text-decoration: none;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+    }
+
+    .pagination .page-item.active .page-link {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: #fff;
+    }
+
+    .pagination .page-item.disabled .page-link {
+        color: #6c757d;
+        pointer-events: none;
+        background-color: #fff;
+        border-color: #dee2e6;
+    }
+
+    /* 操作按钮组*/
+    .task-action-buttons {
+        margin-bottom: 1rem;
+    }
+
+    .task-action-buttons .btn {
+        margin-right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 100%;"></div>
+<div class="row">
+    {% set current_nav_key = 'annotate'%}
+    {% include "project_nav.html"%}
+    <div class="col-10">
+        <!-- 任务操作按钮组（参考图片管理多选操作按钮） -->
+        <div class="task-action-buttons" style="margin-bottom: 1rem;">
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+                <i class="fas fa-plus"></i> 新增标注任务
+            </button>
+            <button class="btn btn-primary" id="submitSelectedTaskBtn" onclick="submitSelectedTask()">
+                <i class="fas fa-upload"></i> 提交
+            </button>
+        </div>
+
+        <!--全局参数-->
+        <input type="hidden" id="global_projectId" value="{{ project.id }}">
+
+
+        <!-- 标注任务列表（参考图片管理表格/分页风格） -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="mb-0">标注任务 (<span id="taskTotalCount">{{ pagination.total }}</span> 个)</h4>
+                    <div>
+                        <span class="me-2">每页显示:</span>
+                        <select id="taskPerPageSelect" class="form-select form-select-sm d-inline-block w-auto">
+                            <option value="10" selected>10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover task-table">
+                        <thead>
+                            <tr>
+                                <th>
+                                    <input type="checkbox" class="form-check-input" id="taskSelectAllCheckbox">
+                                </th>
+                                <th class="w-auto">序号</th>
+                                <th class="w-20">开始时间</th>
+                                <th>结束时间</th>
+                                <th>负责人</th>
+                                <th class="w-10">任务状态</th>
+                                <th class="w-30">任务进度</th>
+                                <th class="w-30">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="taskList">
+                            <!-- 任务数据将通过JS从后端接口加载（参考图片管理空状态） -->
+                            {% for task in task_list %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" class="form-check-input task-checkbox"
+                                        data-task-id="{{ task.id }}">
+                                </td>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ task.start_time }}</td>
+                                <td>{{ task.end_time }}</td>
+                                <td>{{ task.principal }}</td>
+                                <td>
+                                    {% if task.is_submitted == 1 %}
+                                    <span class="badge bg-success"><i class="fas fa-check"></i> 已提交</span>
+                                    {% else %}
+                                    <span class="badge bg-warning"><i class="fas fa-clock"></i> 未提交</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2" style="width: 200px;">
+                                        <div class="progress flex-grow-1" style="height: 20px;">
+                                            <div class="progress-bar bg-primary" role="progressbar"
+                                                style="width: {{ (task.completed_count / task.total_count) * 100 if task.total_count > 0 else 0 }}%;"
+                                                aria-valuenow="{{ (task.completed_count / task.total_count) * 100 if task.total_count > 0 else 0 }}"
+                                                aria-valuemin="0" aria-valuemax="100">
+                                            </div>
+                                        </div>
+                                        <span class="text-nowrap small">
+                                            {{ "%.2f"|format((task.completed_count / task.total_count) * 100 if
+                                            task.total_count > 0 else 0) }}%
+                                        </span>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if task.is_submitted == 0 %}
+                                    <button class="btn btn-sm btn-primary"
+                                        onclick="editTask('{{ task.id }}')">编辑</button>
+                                    <button class="btn btn-sm btn-outline-danger"
+                                        onclick="deleteTask('{{ task.id }}')">删除</button>
+                                    {% endif %}
+                                    {% if task.is_submitted == 1 %}
+                                    <button class="btn btn-sm btn-primary"
+                                        onclick="openAnnotateModal('{{ task.id }}')">标注</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 分页控件 -->
+                {% if pagination.pages >= 1 %}
+                <nav aria-label="图片分页">
+                    <ul class="pagination" style="display: flex;justify-content: center;">
+                        <!-- 上一页 -->
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link"
+                                href="{{ url_for('main.project_images', project_id=project.id, page=pagination.prev_num, per_page=pagination.per_page) }}"
+                                aria-label="上一页">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">&laquo;</span>
+                        </li>
+                        {% endif %}
+
+                        <!-- 页码 -->
+                        {% for page_num in pagination.iter_pages() %}
+                        {% if page_num %}
+                        {% if page_num != pagination.page %}
+                        <li class="page-item">
+                            <a class="page-link"
+                                href="{{ url_for('main.project_images', project_id=project.id, page=page_num, per_page=pagination.per_page) }}">{{
+                                page_num }}</a>
+                        </li>
+                        {% else %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ page_num }}</span>
+                        </li>
+                        {% endif %}
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">…</span>
+                        </li>
+                        {% endif %}
+                        {% endfor %}
+
+                        <!-- 下一页 -->
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link"
+                                href="{{ url_for('main.project_images', project_id=project.id, page=pagination.next_num, per_page=pagination.per_page) }}"
+                                aria-label="下一页">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">&raquo;</span>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-images fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">暂无标注任务</h4>
+                    <p class="text-muted">点击右上角按钮创建第一个标注任务</p>
+                    <p class="text-muted">
+                        <a href="{{ url_for('main.annotate_image', project_id=project.id,image_id=images[0].id) }}">
+                            不建任务，直接标注
+                        </a>
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新增/编辑标注任务模态框 -->
+<div class="modal fade" id="addTaskModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="addTaskModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addTaskModalLabel">新增标注任务</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="taskForm">
+                    <input type="hidden" id="taskId" value="0">
+                    <input type="hidden" id="projectId" value="{{ project.id }}">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="startTime" class="form-label">开始时间</label>
+                            <input type="date" class="form-control" id="startTime" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="endTime" class="form-label">结束时间</label>
+                            <input type="date" class="form-control" id="endTime" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="principal" class="form-label">负责人</label>
+                        <input type="text" class="form-control" id="principal" placeholder="请输入负责人姓名" required>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0">选择待标注素材</label>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"
+                                    data-bs-target="#selectMaterialModal">
+                                    <i class="fas fa-plus"></i> 选择标注素材
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger"
+                                    onclick="clearAllTaskItems()">
+                                    <i class="fas fa-trash"></i> 移除全部
+                                </button>
+                            </div>
+                        </div>
+                        <!-- 待标注素材列表（参考图片管理图片列表风格） -->
+                        <div class="card material-list">
+                            <div class="card-body p-0">
+                                <table class="table table-hover">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th>序号</th>
+                                            <th>图片</th>
+                                            <th>大小</th>
+                                            <th>状态</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="taskAnnotateItemList">
+                                        <!-- 素材数据将通过JS从后端接口加载 -->
+                                        <tr>
+                                            <td colspan="5" class="loading-tip">暂无素材</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="submitTaskBtn" onclick="submitTask()">提交</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="selectMaterialModal" data-bs-backdrop="static" tabindex="-1"
+    aria-labelledby="selectMaterialModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="selectMaterialModalLabel">选择标注素材</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <iframe id="materialSelectFrame" src="{{ url_for('main.task_image_list', project_id=project.id) }}"
+                    style="width: 100%; height: 500px; border: none;"></iframe>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" data-bs-toggle="modal" onclick="getIframeSelectedData()"
+                    data-bs-target="#addTaskModal">确定</button>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 标注页面跳转确认弹窗 -->
+<div class="modal fade" id="annotateModal" tabindex="-1" aria-labelledby="annotateModalLabel" data-bs-backdrop="static"
+    aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="annotateModalLabel">标注</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="scrollbar-width: none;">
+                <iframe id="annotateFrame" src=""
+                    style="width: 100%; height: 100%; border: none; scrollbar-width: none;"></iframe>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- 图片放大预览模态框（默认隐藏） -->
+<div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imagePreviewModalLabel">图片预览</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body d-flex justify-content-center align-items-center p-0">
+                <!-- 放大后的图片容器 -->
+                <img id="previewImage" src="" alt="图片预览"
+                    style="max-width: 100%; max-height: 80vh; object-fit: contain;">
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let taskItemList = []; // 任务素材列表
+    let currentTaskId = -1; // 当前操作的任务ID
+    const projectId = parseInt(document.getElementById('global_projectId').value); // 全局项目ID
+
+    // 编辑任务
+    function editTask(taskId) {
+        const taskRow = document.querySelector(`tr[data-task-id="${taskId}"]`);
+
+        fetch(`/api/task-annotation/${taskId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`请求失败（状态码：${response.status}）`);
+                }
+                return response.json();
+            })
+            .then(res => {
+                if (!res.success) {
+                    layer.msg(res.message, {
+                        icon: 7,
+                        time: 3000,
+                        offset: 'center'
+                    });
+                    return;
+                }
+
+                const task = res.data;
+                document.getElementById('taskId').value = task.id;
+                document.getElementById('addTaskModalLabel').textContent = '编辑标注任务';
+                document.getElementById('startTime').value = task.start_time;
+                document.getElementById('endTime').value = task.end_time;
+                document.getElementById('principal').value = task.principal;
+
+                // 填充待标注素材列表
+                buildTaskItemList(task.task_items);
+
+                new bootstrap.Modal(document.getElementById('addTaskModal')).show();
+            })
+            .catch(error => {
+                const errorMsg = error.message || '获取任务详情失败，请重试';
+                layer.alert(errorMsg, {
+                    title: '获取失败',
+                    icon: 2,
+                    offset: 'center'
+                });
+                console.error('编辑任务异常：', error);
+            });
+    }
+
+    /** 清空所有任务素材项 */
+    function clearAllTaskItems() {
+        taskItemList = [];
+        buildTaskItemList();
+    }
+
+    /** 删除任务 */
+    function deleteTask(taskId) {
+        const taskRow = document.querySelector(`tr[data-task-id="${taskId}"]`);
+
+        if (!confirm('确定要删除该标注任务吗？此操作不可撤销！')) {
+            return;
+        }
+
+        fetch(`/api/task-annotation/${taskId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`请求失败（状态码：${response.status}）`);
+                }
+                return response.json();
+            })
+            .then(res => {
+                if (!res.success) {
+                    layer.msg(res.message, {
+                        icon: 2,
+                        time: 3000,
+                        offset: 'center'
+                    });
+                    return;
+                }
+                layer.msg("任务删除成功！", {
+                    icon: 1,
+                    time: 2000,
+                    offset: 'center'
+                });
+            })
+            .catch(error => {
+                const errorMsg = error.message || '删除任务失败，请重试';
+                layer.alert(errorMsg, {
+                    title: '删除失败',
+                    icon: 2,
+                    offset: 'center'
+                });
+                console.error('删除任务异常：', error);
+            });
+    }
+
+    /** 打开标注页面模态框 */
+    function openAnnotateModal(taskId) {
+        currentTaskId = taskId;
+
+        // 获取iframe元素
+        const annotateFrame = document.getElementById('annotateFrame');
+        // 设置iframe的src属性为标注页面的URL
+        annotateFrame.src = `/api/task-annotation/${projectId}/image/${currentTaskId}`;
+
+        const annotateModalEL = document.getElementById('annotateModal');
+        const annotateModal = new bootstrap.Modal(annotateModalEL);
+
+        annotateModalEL.addEventListener('shown.bs.modal', () => {
+            annotateFrame.contentWindow.postMessage('annotateModalShown', window.location.origin);
+        });
+        annotateFrame.onload = function () {
+            annotateModal.show();
+        };
+    }
+
+    /** 关闭标注页面模态框 */
+    function closeAnnotateModal() {
+        // // 获取iframe元素
+        // const annotateFrame = document.getElementById('annotateFrame');
+        // // 清空iframe的src属性，释放资源
+        // annotateFrame.src = '';
+        window.location.reload();
+    }
+
+    /** 提交任务表单 */
+    function submitTask() {
+        const taskId = parseInt(document.getElementById('taskId').value);
+        const projectId = parseInt(document.getElementById('projectId').value);
+        const startTime = document.getElementById('startTime').value;
+        const endTime = document.getElementById('endTime').value;
+        const principal = document.getElementById('principal').value;
+        const taskItemList = document.getElementById('taskAnnotateItemList').querySelectorAll('tr');
+
+        const imageIds = [];
+
+        taskItemList.forEach(row => {
+            const imageId = row.dataset.image_id;
+            if (imageId) {
+                imageIds.push(parseInt(imageId));
+            }
+        });
+
+        // 2. 表单验证（替换原生alert为layer.msg，更美观）
+        if (!startTime || !endTime || !principal || imageIds.length === 0) {
+            layer.msg('请完善所有必填项并选择至少一个待标注素材！', {
+                icon: 7, // 警告图标，更贴合验证失败场景
+                time: 3000,
+                offset: 'center'
+            });
+            return;
+        }
+        if (new Date(startTime) > new Date(endTime)) {
+            layer.msg('开始时间不能晚于结束时间！', {
+                icon: 7,
+                time: 3000,
+                offset: 'center'
+            });
+            return;
+        }
+
+        const reqData = {
+            project_id: projectId,
+            start_time: startTime,
+            end_time: endTime,
+            principal: principal,
+            image_ids: imageIds
+        };
+
+        let fetchUrl = '';
+        let fetchMethod = 'POST';
+
+        if (taskId === 0) {
+            // 新增任务
+            fetchUrl = '/api/task-annotation';
+        } else {
+            // 编辑任务
+            fetchUrl = `/api/task-annotation/${taskId}`;
+            fetchMethod = 'PUT';
+        }
+
+        fetch(fetchUrl, {
+            method: fetchMethod,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(reqData)
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`请求失败（状态码：${response.status}）`);
+                }
+                return response.json();
+            })
+            .then(res => {
+                if (!res.success) {
+                    layer.msg(res.message, {
+                        icon: 2,
+                        time: 3000,
+                        offset: 'center'
+                    });
+                    return;
+                }
+                layer.msg(res.message, {
+                    icon: 1,
+                    time: 2000,
+                    offset: 'center'
+                }, function () {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('addTaskModal'));
+                    if (modal) modal.hide();
+                });
+            })
+            .catch(error => {
+                const errorMsg = error.message || '提交任务失败，请重试';
+                layer.alert(errorMsg, {
+                    title: '提交失败',
+                    icon: 2,
+                    offset: 'center'
+                });
+                console.error('提交任务异常：', error);
+            });
+    };
+
+    /** 图片放大预览功能 */
+    function previewImage(imgSrc, imgAlt) {
+        // 1. 获取模态框和预览图片元素
+        const previewModal = new bootstrap.Modal(document.getElementById('imagePreviewModal'));
+        const previewImg = document.getElementById('previewImage');
+        const modalTitle = document.getElementById('imagePreviewModalLabel');
+
+        // 2. 更新模态框内容
+        previewImg.src = imgSrc; // 设置放大后的图片地址
+        previewImg.alt = imgAlt; // 设置图片替代文本
+        modalTitle.textContent = imgAlt || '图片预览'; // 设置模态框标题为图片文件名
+
+        // 3. 显示模态框
+        previewModal.show();
+    }
+
+    /** 移除单个任务素材项 */
+    function removeTaskItem(button, itemId) {
+        const row = button.closest('tr');
+        if (row) {
+            row.remove();
+            removeTaskAnnotateItem([itemId]);
+        }
+    }
+
+    /** 移除任务素材项 */
+    function removeTaskAnnotateItem(itemIds) {
+        taskItemList = taskItemList.filter(item => !itemIds.includes(item.id));
+        buildTaskItemList(taskItemList);
+
+        fetch(`/api/task-annotation/item`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                item_ids: itemIds
+            })
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`请求失败（状态码：${response.status}）`);
+                }
+                return response.json();
+            })
+            .then(res => {
+                if (!res.success) {
+                    layer.alert(res.message, {
+                        title: '移除失败',
+                        icon: 2,
+                        offset: 'center'
+                    });
+                    return;
+                }
+            })
+            .catch(error => {
+                const errorMsg = error.message || '移除素材失败，请重试';
+                layer.alert(errorMsg, {
+                    title: '移除失败',
+                    icon: 2,
+                    offset: 'center'
+                });
+                console.error('移除素材异常：', error);
+            });
+    }
+
+    /** 构建任务素材列表 */
+    function buildTaskItemList(taskItems) {
+        const taskAnnotateItemList = document.getElementById('taskAnnotateItemList');
+        taskAnnotateItemList.innerHTML = '';
+        let index = 1;
+
+        taskItemList = taskItems;
+        if (taskItems.length === 0) {
+            taskAnnotateItemList.innerHTML = `
+                <tr>
+                    <td colspan="5" class="loading-tip">暂无素材</td>
+                </tr>
+            `;
+            return;
+        }
+        taskItems.forEach(item => {
+            const row = document.createElement('tr');
+            row.dataset.image_id = item.image_id;
+
+            const staticBaseUrl = `${window.location.origin}/static/`;
+
+            row.innerHTML = `
+                <td>${index}</td>
+                <td>
+                    <img 
+                        src="${staticBaseUrl}${item.path.replace(/^\/+/, '')}"
+                        class="img-thumbnail" 
+                        style="max-width: 50px; max-height: 50px; object-fit: cover;" 
+                        alt="${item.original_filename || '未知图片'}"
+                        onerror="this.src='${staticBaseUrl}images/default.jpg';" 
+                        onclick="previewImage(this.src, this.alt)"
+                    >
+                </td>
+                <td>${item.width || 0} × ${item.height || 0}</td>  <!-- 给属性添加兜底，避免 undefined -->
+                <td>
+                ${item.annotate_status ?
+                    '<span class="badge bg-success"><i class="fas fa-check"></i> 已标注</span>' :
+                    '<span class="badge bg-secondary"><i class="fas fa-times"></i> 未标注</span>'}
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-danger" onclick="removeTaskItem(this,${item.id})">
+                        <i class="fas fa-trash"></i> 移除
+                    </button>
+                </td>
+            `;
+            taskAnnotateItemList.appendChild(row);
+            index += 1;
+        });
+    }
+
+    /**
+     * 监听页面的请求消息，被动返回数据
+     */
+    window.addEventListener('message', function (event) {
+
+        // 验证消息类型（避免接收无关消息）
+        if (event.data.type === 'iframeSelectedImageData') {
+            const images = event.data.data;
+            if (images && images.length > 0) {
+                buildTaskItemList(images);
+            }
+        }
+    });
+
+    /**
+     * 从 选择素材中获取选中数据
+     */
+    function getIframeSelectedData() {
+        const imageIframe = document.getElementById('materialSelectFrame');
+        if (imageIframe.contentWindow) {
+            imageIframe.contentWindow.postMessage(
+                { type: 'requestSelectedData' },
+                window.location.origin
+            );
+        }
+    }
+
+    /** 提交选中任务 */
+    function submitSelectedTask() {
+        const selectedCheckboxes = document.querySelectorAll('.task-checkbox:checked');
+        if (selectedCheckboxes.length === 0) {
+            layer.msg('请先选择要提交的标注任务！', {
+                icon: 7,
+                time: 3000,
+                offset: 'center'
+            });
+            return;
+        }
+
+        layer.confirm('确定要提交选中的标注任务吗？提交后将无法修改！', {
+            icon: 3,
+            title: '确认提交',
+            offset: 'center'
+        }, function (index) {
+            layer.close(index);
+
+            taskIds = [];
+            selectedCheckboxes.forEach(checkbox => {
+                taskIds.push(checkbox.dataset.taskId);
+            });
+            console.log('提交任务IDs：', taskIds);
+            fetch('/api/task-annotation/submit-multiple', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ task_ids: taskIds })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`请求失败（状态码：${response.status}）`);
+                    }
+                    return response.json();
+                })
+                .then(res => {
+                    if (!res.success) {
+                        layer.msg(res.message, {
+                            icon: 2,
+                            time: 3000,
+                            offset: 'center'
+                        });
+                        return;
+                    }
+                    layer.msg('选中任务提交成功！', {
+                        icon: 1,
+                        time: 2000,
+                        offset: 'center'
+                    });
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                })
+                .catch(error => {
+                    const errorMsg = error.message || '提交任务失败，请重试';
+                    layer.alert(errorMsg, {
+                        title: '提交失败',
+                        icon: 2,
+                        offset: 'center'
+                    });
+                    console.error('提交任务异常：', error);
+                });
+        });
+    }
+
+    /**关闭新增修改模态框*/
+    function closeTaskModal() {
+        const selectMaterialModal = document.getElementById('selectMaterialModal');
+        const materialModalInstance = bootstrap.Modal.getInstance(selectMaterialModal);
+        if (!materialModalInstance || !materialModalInstance._isShown) {
+            window.location.reload();
+        }
+    }
+
+    /** 打开选择素材模态框 */
+    function openMaterialModal(e) {
+        console.log('打开选择素材模态框');
+        e.preventDefault(); // 关键：阻止默认事件传播
+        e.stopPropagation(); // 阻止事件向上冒泡
+
+        const selectMaterialModal = document.getElementById('selectMaterialModal');
+        new bootstrap.Modal(selectMaterialModal).show();
+        selectMaterialModal.style.zIndex = 1060; // 外层弹框默认zIndex=1050，新弹框设为1060即可
+    }
+    /** 每页显示数量变化处理 */
+    function taskPageChange(e) {
+        const targetSelect = e.target;
+        const perPage = targetSelect.value;
+
+        console.log('每页显示数量变化：', perPage);
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set('per_page', perPage);
+        currentUrl.searchParams.set('page', 1);
+        window.location.href = currentUrl.toString();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // 监听模态框关闭事件，刷新页面
+        const taskModal = document.getElementById('addTaskModal');
+        const annotateModal = document.getElementById('annotateModal');
+        const selectMaterialModal = document.getElementById('selectMaterialModal');
+        const taskPerPageSelect = document.getElementById('taskPerPageSelect');
+
+
+        taskPerPageSelect.addEventListener('change', taskPageChange);
+        taskModal.addEventListener('hidden.bs.modal', closeTaskModal)
+        annotateModal.addEventListener('hidden.bs.modal', closeAnnotateModal)
+        selectMaterialModal.addEventListener('show.bs.modal', openMaterialModal);
+    });
+</script>
+{% endblock %}

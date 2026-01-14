@@ -1,0 +1,203 @@
+<!-- Bootstrap CSS -->
+<script src="/static/js/jquery-2.1.4.min.js"></script>
+<link href="/static/css/bootstrap.min.css" rel="stylesheet">
+<script src="/static/js/layer/layer.js"></script>
+<!-- Font Awesome -->
+<link rel="stylesheet" href="/static/css/all.min.css">
+{% block extra_css %}
+<style>
+    .image-card {
+        transition: transform 0.2s;
+    }
+
+    .image-card:hover {
+        transform: scale(1.02);
+    }
+
+    .image-placeholder {
+        background-color: #f8f9fa;
+        border: 2px dashed #dee2e6;
+        border-radius: 0.375rem;
+        text-align: center;
+        padding: 2rem;
+        margin-bottom: 1rem;
+    }
+
+    .drop-zone {
+        border: 2px dashed #007bff;
+        background-color: #f8f9fa;
+        border-radius: 0.375rem;
+        padding: 2rem;
+        text-align: center;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .drop-zone.dragover {
+        background-color: #e9ecef;
+        border-color: #0056b3;
+    }
+
+    .file-info {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+
+    /* 分页样式 */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        padding: 20px 0;
+    }
+
+    .pagination .page-item {
+        margin: 0 2px;
+    }
+
+    .pagination .page-link {
+        color: #007bff;
+        padding: 0.5rem 0.75rem;
+        text-decoration: none;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+    }
+
+    .pagination .page-item.active .page-link {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: white;
+    }
+
+    .pagination .page-item.disabled .page-link {
+        color: #6c757d;
+        pointer-events: none;
+        background-color: #fff;
+        border-color: #dee2e6;
+    }
+
+    /* 多选相关样式 */
+    .image-checkbox {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+    }
+
+    .image-card.selected {
+        border: 2px solid #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, .25);
+    }
+
+    .action-buttons {
+        margin-bottom: 1rem;
+    }
+
+    .action-buttons .btn {
+        margin-right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <form id="taskForm">
+        <input type="hidden" id="taskId" value="0">
+        <input type="hidden" id="projectId" value="{{ project.id }}">
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label for="startTime" class="form-label">开始时间</label>
+                <input type="date" class="form-control" id="startTime" required>
+            </div>
+            <div class="col-md-6">
+                <label for="endTime" class="form-label">结束时间</label>
+                <input type="date" class="form-control" id="endTime" required>
+            </div>
+        </div>
+        <div class="mb-3">
+            <label for="principal" class="form-label">负责人</label>
+            <input type="text" class="form-control" id="principal" placeholder="请输入负责人姓名" required>
+        </div>
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <label class="form-label mb-0">选择待标注素材</label>
+                <div>
+                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"
+                        data-bs-target="#selectMaterialModal">
+                        <i class="fas fa-plus"></i> 选择标注素材
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearAllMaterials()">
+                        <i class="fas fa-trash"></i> 移除全部
+                    </button>
+                </div>
+            </div>
+            <!-- 待标注素材列表（参考图片管理图片列表风格） -->
+            <div class="card material-list">
+                <div class="card-body p-0">
+                    <table class="table table-hover">
+                        <thead class="bg-light">
+                            <tr>
+                                <th>序号</th>
+                                <th>图片</th>
+                                <th>大小</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="materialList">
+                            <!-- 素材数据将通过JS从后端接口加载 -->
+                            <tr>
+                                <td colspan="5" class="loading-tip">正在加载素材列表...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- 素材分页（参考图片管理分页样式） -->
+            <div class="d-flex justify-content-center mt-2">
+                <nav aria-label="素材分页">
+                    <ul class="pagination pagination-sm" id="materialPagination">
+                        <li class="page-item disabled">
+                            <a class="page-link" href="#" onclick="changeMaterialPage('prev')">上一页</a>
+                        </li>
+                        <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                        <li class="page-item">
+                            <a class="page-link" href="#" onclick="changeMaterialPage('next')">下一页</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+
+    function getSelectedImages() {
+        const selectedCheckboxes = document.querySelectorAll('.image-select-checkbox:checked');
+        const selectedImages = Array.from(selectedCheckboxes).map(cb => {
+            const imageInfo = JSON.parse(cb.dataset.imageInfo);
+            imageInfo.id = parseInt(imageInfo.id);
+            return imageInfo;
+        });
+
+        return selectedImages;
+    }
+
+    // 3. 监听父页面的请求消息，被动返回数据
+    window.addEventListener('message', function (event) {
+        // if (!window.ALLOWED_ORIGINS.includes(event.origin)) return;
+
+        // 响应父页面的数据请求
+        if (event.data.type === 'requestSelectedData') {
+            const images = getSelectedImages();
+            window.parent.postMessage(
+                { type: 'iframeSelectedImageData', data: images },
+                event.origin // 直接返回发送方域名，更安全
+            );
+        }
+    });
+
+</script>
+{% endblock %}

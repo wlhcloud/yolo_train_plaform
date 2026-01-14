@@ -1,0 +1,287 @@
+<!-- Bootstrap CSS -->
+<script src="/static/js/jquery-2.1.4.min.js"></script>
+<link href="/static/css/bootstrap.min.css" rel="stylesheet">
+<script src="/static/js/layer/layer.js"></script>
+<!-- Font Awesome -->
+<link rel="stylesheet" href="/static/css/all.min.css">
+{% block extra_css %}
+<style>
+    .capture-card {
+        transition: transform 0.2s;
+    }
+
+    .capture-card:hover {
+        transform: scale(1.02);
+    }
+
+    .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 5px;
+    }
+
+    .status-running {
+        background-color: #28a745;
+    }
+
+    .status-stopped {
+        background-color: #dc3545;
+    }
+
+    .status-pending {
+        background-color: #ffc107;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div style="overflow: hidden;">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>视频截图</span>
+                        <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse"
+                            data-bs-target="#videoHelp" aria-expanded="false" aria-controls="videoHelp">
+                            <i class="fas fa-question-circle"></i> 帮助
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="collapse" id="videoHelp">
+                        <div class="alert alert-info">
+                            <h6>视频截图说明：</h6>
+                            <ul>
+                                <li>上传本地视频，设置截图间隔和总数量开始截图</li>
+                                <li>截图会自动保存到当前项目中</li>
+                                <li>可以通过停止按钮中断截图过程</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <form id="videoForm">
+                        <div class="mb-3">
+                            <input type="file" class="form-control" id="videoFile" name="videoFile" multiple
+                                accept="video/*">
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="interval" class="form-label">截图间隔（秒）</label>
+                                    <input type="number" class="form-control" id="interval" min="1" max="3600" value="5"
+                                        required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="maxCount" class="form-label">总截图数量</label>
+                                    <input type="number" class="form-control" id="maxCount" min="1" max="10000"
+                                        value="10" required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" id="startVideoBtn">
+                            <i class="fas fa-play"></i> 开始截图
+                        </button>
+                        <button type="button" class="btn btn-danger" id="stopVideoBtn" disabled>
+                            <i class="fas fa-stop"></i> 停止截图
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    截图状态
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6>视频截图状态</h6>
+                        <div id="视频Status">
+                            <span class="status-indicator status-stopped"></span>
+                            <span>未运行</span>
+                        </div>
+                        <div class="mt-2">
+                            <small>已截图: <span id="视频CapturedCount">0</span>/<span id="视频MaxCount">0</span></small>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <button class="btn btn-sm btn-outline-primary" id="refreshStatusBtn">
+                            <i class="fas fa-sync"></i> 刷新状态
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    截图状态
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6>视频截图状态</h6>
+                        <div id="videoStatus">
+                            <span class="status-indicator status-stopped"></span>
+                            <span>未运行</span>
+                        </div>
+                        <div class="mt-2">
+                            <small>已截图: <span id="videoCapturedCount">0</span>/<span id="videoMaxCount">0</span></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const projectId = '{{ project.id }}'
+
+        // 视频截图功能
+        const videoForm = document.getElementById('videoForm');
+        const startVideoBtn = document.getElementById('startVideoBtn');
+        const stopVideoBtn = document.getElementById('stopVideoBtn');
+
+        // 状态显示元素
+        const videoStatus = document.getElementById('videoStatus');
+        const videoCapturedCount = document.getElementById('videoCapturedCount');
+        const videoMaxCount = document.getElementById('videoMaxCount');
+        const refreshStatusBtn = document.getElementById('refreshStatusBtn');
+
+        // 视频截图表单提交
+        startVideoBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            debugger
+            const videoInput = document.getElementById('videoFile');
+            const intervalInput = document.getElementById('interval');
+            const maxCountInput = document.getElementById('maxCount');
+
+            // 2. 校验前置条件（是否选择了视频文件）
+            if (!videoInput.files || videoInput.files.length === 0) {
+                layer.msg('请先上传视频文件！')
+                return;
+            }
+            const videoFile = videoInput.files[0];
+
+            // 3. 构建 FormData（关键：支持传递文件+普通参数）
+            const formData = new FormData();
+            formData.append('video', videoFile);
+            formData.append('interval', intervalInput.value || 5);
+            formData.append('max_count', maxCountInput.value || 10);
+
+            startVideoBtn.disabled = true;
+            startVideoBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 启动中...';
+
+            fetch(`/api/project/${projectId}/video/start`, {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        stopVideoBtn.disabled = false;
+                        updateVideoStatus();
+                    } else {
+                        layer.msg('启动失败: ' + data.message);
+                        startVideoBtn.disabled = false;
+                        startVideoBtn.innerHTML = '<i class="fas fa-play"></i> 开始截图';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    layer.msg('启动截图时发生错误');
+                    startVideoBtn.disabled = false;
+                    startVideoBtn.innerHTML = '<i class="fas fa-play"></i> 开始截图';
+                });
+        });
+
+        // 停止视频截图
+        stopVideoBtn.addEventListener('click', function () {
+            stopVideoBtn.disabled = true;
+            stopVideoBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 停止中...';
+
+            fetch(`/api/project/${projectId}/video/stop`, {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        startVideoBtn.disabled = false;
+                        stopVideoBtn.disabled = true;
+                        stopVideoBtn.innerHTML = '<i class="fas fa-stop"></i> 停止截图';
+                        updateVideoStatus();
+                    } else {
+                        layer.msg('停止失败: ' + data.message);
+                        stopVideoBtn.disabled = false;
+                        stopVideoBtn.innerHTML = '<i class="fas fa-stop"></i> 停止截图';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    layer.msg('停止截图时发生错误');
+                    stopVideoBtn.disabled = false;
+                    stopVideoBtn.innerHTML = '<i class="fas fa-stop"></i> 停止截图';
+                });
+        });
+
+        // 刷新状态
+        refreshStatusBtn.addEventListener('click', function () {
+            updateVideoStatus();
+        });
+
+        // 更新视频状态
+        function updateVideoStatus() {
+            fetch(`/api/project/${projectId}/video/status`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status) {
+                        // 更新状态显示
+                        if (data.status.running) {
+                            videoStatus.innerHTML = '<span class="status-indicator status-running"></span> 运行中';
+                            startVideoBtn.disabled = true;
+                            startVideoBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 运行中...';
+                            stopVideoBtn.disabled = false;
+                        } else {
+                            videoStatus.innerHTML = '<span class="status-indicator status-stopped"></span> 已停止';
+                            startVideoBtn.disabled = false;
+                            startVideoBtn.innerHTML = '<i class="fas fa-play"></i> 开始截图';
+                            stopVideoBtn.disabled = true;
+                        }
+
+                        // 更新计数
+                        videoCapturedCount.textContent = data.status.captured_count || 0;
+                        videoMaxCount.textContent = data.status.max_count || 0;
+                    } else {
+                        videoStatus.innerHTML = '<span class="status-indicator status-stopped"></span> 未运行';
+                        startVideoBtn.disabled = false;
+                        startVideoBtn.innerHTML = '<i class="fas fa-play"></i> 开始截图';
+                        stopVideoBtn.disabled = true;
+                        videoCapturedCount.textContent = '0';
+                        videoMaxCount.textContent = '0';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+        }
+
+        // 定期更新状态
+        setInterval(function () {
+            updateVideoStatus();
+        }, 5000); // 每5秒更新一次状态
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+
+{% block title %}数据集管理 - {{ project.name }} - AI模型训练平台{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 100%;">
+    <div class="row">
+        {% set current_nav_key = 'dataset'%}
+        {% include "project_nav.html"%}
+        <div class="col-10">
+            <div class="row">
+                <div class="card mt-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>数据集统计</span>
+                        <button id="downloadDataset" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-download"></i> 下载数据集
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="alert alert-info">
+                                    <h5>训练集</h5>
+                                    <p class="mb-0 fs-4" id="trainCount">{{ train_count }}</p>
+                                    <p class="mb-0">已标注图片</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="alert alert-success">
+                                    <h5>验证集</h5>
+                                    <p class="mb-0 fs-4" id="valCount">{{ val_count }}</p>
+                                    <p class="mb-0">已标注图片</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="alert alert-warning">
+                                    <h5>测试集</h5>
+                                    <p class="mb-0 fs-4" id="testCount">{{ test_count }}</p>
+                                    <p class="mb-0">已标注图片</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="alert alert-secondary">
+                                    <h5>未分配</h5>
+                                    <p class="mb-0 fs-4" id="unassignedCount">{{ unassigned_count }}</p>
+                                    <p class="mb-0">已标注图片</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-3">
+                            <button id="autoAssign" class="btn btn-primary">
+                                <i class="fas fa-magic"></i> 自动划分数据集 (70% 训练 / 20% 验证 / 10% 测试)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>图片列表</span>
+                            <div>
+                                <button id="assignTrain" class="btn btn-sm btn-primary me-1">
+                                    <i class="fas fa-graduation-cap"></i> 设为训练集
+                                </button>
+                                <button id="assignVal" class="btn btn-sm btn-success me-1">
+                                    <i class="fas fa-check-circle"></i> 设为验证集
+                                </button>
+                                <button id="assignTest" class="btn btn-sm btn-info me-1">
+                                    <i class="fas fa-vial"></i> 设为测试集
+                                </button>
+                                <button id="assignUnassigned" class="btn btn-sm btn-secondary">
+                                    <i class="fas fa-question-circle"></i> 设为未分配
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        {% set project_images = images %}
+                        {% if project_images %}
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>
+                                            <input type="checkbox" id="selectAll">
+                                        </th>
+                                        <th>图片</th>
+                                        <th>文件名</th>
+                                        <th>数据集类型</th>
+                                        <th>尺寸</th>
+                                        <th>标注框数量</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for image in project_images %}
+                                    <tr>
+                                        <td>
+                                            <input type="checkbox" class="image-checkbox" data-id="{{ image.id }}">
+                                        </td>
+                                        <td>
+                                            <img src="{{ url_for('static', filename=image.path) }}"
+                                                style="width: 50px; height: 50px; object-fit: cover;"
+                                                alt="{{ image.original_filename }}">
+                                        </td>
+                                        <td>{{ image.original_filename }}</td>
+                                        <td>
+                                            {% if image.dataset_type == 'train' %}
+                                            <span class="badge bg-primary">训练集</span>
+                                            {% elif image.dataset_type == 'val' %}
+                                            <span class="badge bg-success">验证集</span>
+                                            {% elif image.dataset_type == 'test' %}
+                                            <span class="badge bg-info">测试集</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">未分配</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ image.width }} × {{ image.height }}</td>
+                                        <td>{{ image.annotations|length }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-images fa-3x text-muted mb-3"></i>
+                            <h4 class="text-muted">暂无图片</h4>
+                            <p class="text-muted">请先上传图片</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <!-- 分页控件 -->
+                    {% if pagination.pages > 1 %}
+                    <nav aria-label="图片分页">
+                        <ul class="pagination">
+                            <!-- 上一页 -->
+                            {% if pagination.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link"
+                                    href="{{ url_for('main.project_images', project_id=project.id, page=pagination.prev_num, per_page=pagination.per_page) }}"
+                                    aria-label="上一页">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">&laquo;</span>
+                            </li>
+                            {% endif %}
+
+                            <!-- 页码 -->
+                            {% for page_num in pagination.iter_pages() %}
+                            {% if page_num %}
+                            {% if page_num != pagination.page %}
+                            <li class="page-item">
+                                <a class="page-link"
+                                    href="{{ url_for('main.project_dataset', project_id=project.id, page=page_num, per_page=pagination.per_page) }}">{{
+                                    page_num }}</a>
+                            </li>
+                            {% else %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ page_num }}</span>
+                            </li>
+                            {% endif %}
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">…</span>
+                            </li>
+                            {% endif %}
+                            {% endfor %}
+
+                            <!-- 下一页 -->
+                            {% if pagination.has_next %}
+                            <li class="page-item">
+                                <a class="page-link"
+                                    href="{{ url_for('main.project_dataset', project_id=project.id, page=pagination.next_num, per_page=pagination.per_page) }}"
+                                    aria-label="下一页">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">&raquo;</span>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-images fa-3x text-muted mb-3"></i>
+                        <h4 class="text-muted">暂无图片</h4>
+                        <p class="text-muted">请先上传图片</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const projectId = '{{ project.id }}';
+
+        // 全选功能
+        document.getElementById('selectAll').addEventListener('change', function () {
+            const checkboxes = document.querySelectorAll('.image-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+        });
+
+        // 自动划分功能
+        document.getElementById('autoAssign').addEventListener('click', function () {
+            if (confirm('确定要自动划分数据集吗？这将重新分配所有已标注图片的数据集类型。')) {
+                autoAssignDataset();
+            }
+        });
+
+        // 下载数据集
+        document.getElementById('downloadDataset').addEventListener('click', function () {
+            // 显示正在准备下载的提示
+            const downloadBtn = this;
+            const originalText = downloadBtn.innerHTML;
+            downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 正在准备...';
+            downloadBtn.disabled = true;
+
+            // 请求生成并下载数据集
+            fetch(`/api/project/${projectId}/dataset/download`)
+                .then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    }
+                    throw new Error('下载失败');
+                })
+                .then(blob => {
+                    // 创建下载链接
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `dataset_${projectId}.zip`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+
+                    // 恢复按钮状态
+                    downloadBtn.innerHTML = originalText;
+                    downloadBtn.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    layer.msg('数据集下载失败: ' + error.message);
+                    // 恢复按钮状态
+                    downloadBtn.innerHTML = originalText;
+                    downloadBtn.disabled = false;
+                });
+        });
+
+        // 分配数据集类型
+        document.getElementById('assignTrain').addEventListener('click', function () {
+            updateDatasetType('train');
+        });
+
+        document.getElementById('assignVal').addEventListener('click', function () {
+            updateDatasetType('val');
+        });
+
+        document.getElementById('assignTest').addEventListener('click', function () {
+            updateDatasetType('test');
+        });
+
+        document.getElementById('assignUnassigned').addEventListener('click', function () {
+            updateDatasetType('unassigned');
+        });
+
+        // 自动划分数据集
+        function autoAssignDataset() {
+            fetch(`/api/project/${projectId}/dataset/auto_assign`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        layer.msg(`自动划分完成！\n训练集: ${data.train_count}张\n验证集: ${data.val_count}张\n测试集: ${data.test_count}张`);
+                        location.reload();
+                    } else {
+                        layer.msg('自动划分失败: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    layer.msg('自动划分过程中出现错误');
+                });
+        }
+
+        // 更新数据集类型
+        function updateDatasetType(datasetType) {
+            const selectedImages = Array.from(document.querySelectorAll('.image-checkbox:checked'))
+                .map(checkbox => parseInt(checkbox.dataset.id));
+
+            if (selectedImages.length === 0) {
+                layer.msg('请先选择图片');
+                return;
+            }
+
+            fetch(`/api/project/${projectId}/dataset/update`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    image_ids: selectedImages,
+                    dataset_type: datasetType
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        layer.msg('更新失败');
+                    }
+                });
+        }
+    });
+</script>
+{% endblock %}

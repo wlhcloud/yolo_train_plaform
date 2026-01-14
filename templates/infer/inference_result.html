@@ -1,0 +1,272 @@
+<!-- infer/inference_result.html -->
+<!-- Bootstrap CSS -->
+<script src="/static/js/jquery-2.1.4.min.js"></script>
+<link href="/static/css/bootstrap.min.css" rel="stylesheet">
+<script src="/static/js/layer/layer.js"></script>
+<!-- Font Awesome -->
+<link rel="stylesheet" href="/static/css/all.min.css">
+<script src="/static/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+{% block extra_css %}
+<style>
+    .result-container {
+        padding: 20px;
+        max-width: 100%;
+    }
+
+    .material-info {
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #eee;
+    }
+
+    .result-content {
+        margin-top: 20px;
+    }
+
+    .result-card {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+    }
+
+    .error-text {
+        color: #dc3545;
+    }
+
+    .success-text {
+        color: #198754;
+    }
+
+    .preview-img {
+        max-width: 100%;
+        max-height: 500px;
+        border-radius: 6px;
+        margin: 10px 0;
+    }
+
+    .class-count {
+        margin: 5px 0;
+        padding: 5px;
+        background: #fff;
+        border-left: 3px solid #0d6efd;
+    }
+
+    .region-card {
+        margin: 10px 0;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 6px;
+    }
+
+    .region-title {
+        font-weight: bold;
+        color: #212529;
+        margin-bottom: 10px;
+    }
+
+    .raw-json {
+        font-family: monospace;
+        white-space: pre-wrap;
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 6px;
+        margin-top: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="result-container">
+    <!-- 素材基础信息 -->
+    <div class="material-info">
+        <h4>素材信息</h4>
+        <p><strong>项目名称：</strong>{{ project.name }}</p>
+        <p><strong>素材ID：</strong>{{ material.id }}</p>
+        <p><strong>文件名：</strong>{{ material.filename }}</p>
+        <p><strong>素材类型：</strong>
+            {% if material.material_type == 1 %}图片
+            {% elif material.material_type == 2 %}视频
+            {% elif material.material_type == 3 %}RTSP流
+            {% else %}未知
+            {% endif %}
+        </p>
+        <p><strong>推理状态：</strong>
+            {% if material_result.success %}<span class="success-text">成功</span>
+            {% else %}<span class="error-text">失败</span>
+            {% endif %}
+        </p>
+    </div>
+    <!-- 推理结果详情 -->
+    <div class="result-content">
+        <h4>推理结果详情</h4>
+
+        {% if material_result %}
+        {# 优先展示结构化数据 #}
+        {% if material_result.error %}
+        {# 解析失败的原始数据 #}
+        <div class="result-card">
+            <p class="error-text">结果格式异常，原始内容：</p>
+            <div class="raw-json">{{ material_result.error }}</div>
+        </div>
+        {% else %}
+        {# 结构化数据展示 #}
+        <div class="result-card">
+            {# 图片预览 #}
+            {% if material_result.result.image_url %}
+            <p><strong>结果图片：</strong></p>
+            <img src="{{ material_result.result.image_url }}" class="preview-img" alt="推理结果图片">
+            {% endif %}
+
+            {% if material_result.result.video_url %}
+            <p><strong>结果视频：</strong></p>
+            <video controls class="img-fluid" preload="metadata">
+                <source src="{{ material_result.result.video_url }}" type="video/mp4">
+                您的浏览器不支持视频播放。
+            </video>
+            {% endif %}
+
+            {% if material_result.result.mu38_url %}
+            <p><strong>实时视频：</strong></p>
+            <!-- 视频播放标签保持不变 -->
+            <video id="video-player" controls width="100%" height="auto"></video>
+            {% endif %}
+
+            {# 总数统计 #}
+            {% if material_result.result.total_count is defined %}
+            <p><strong>检测总数：</strong>{{ material_result.result.total_count }}</p>
+            {% endif %}
+
+            {# 分类统计 #}
+            {% if material_result.result.class_counts %}
+            <p><strong>分类统计：</strong></p>
+            {% for class_name, count in material_result.result.class_counts.items() %}
+            <div class="class-count">{{ class_name }}：{{ count }} 个</div>
+            {% endfor %}
+            {% endif %}
+
+            <!-- 区域统计 -->
+            {% if material_result.result.region_stats %}
+            <div>
+                <strong>区域检测统计：</strong>
+                {% for region_name, region_data in material_result.result.region_stats.items() %}
+                <div class="region-card">
+                    <div class="region-title">【{{ region_name }}】</div>
+                    <p>该区域总检测数：{{ region_data.total | default(0) }}</p>
+                    {% if region_data.class_counts %}
+                    <div>该区域分类统计：</div>
+                    {% for class_name, count in region_data.class_counts.items() %}
+                    <div class="class-count-item">{{ class_name }}：{{ count }} 个</div>
+                    {% endfor %}
+                    {% else %}
+                    <p class="text-muted">该区域无分类统计数据</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted">无区域统计数据</p>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="error-text">暂无推理结果</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // ========== 关键修改1：定义核心变量（从模板获取m3u8地址） ==========
+        // 获取video元素
+        const video = document.getElementById('video-player');
+        // 获取模板中的mu38_url（注意是material_result.result.mu38_url）
+        // 兼容空值：如果没有该地址，直接返回
+        const m3u8Url = "{{ material_result.result.mu38_url if (material_result and material_result.result and material_result.result.mu38_url) else '' }}";
+
+        // ========== 关键修改2：判空，避免无地址时执行代码 ==========
+        if (!video || !m3u8Url) {
+            console.log("无实时视频地址或播放元素，跳过HLS初始化");
+            return;
+        }
+
+        // ========== 关键修改3：完整的HLS播放逻辑（含错误处理） ==========
+        // 检查浏览器是否支持 HLS.js
+        if (Hls.isSupported()) {
+            // 初始化 HLS 实例
+            const hls = new Hls({
+                // 可选：配置项，提升实时性
+                maxBufferLength: 10,  // 最大缓冲区长度（秒），越小越实时
+                maxMaxBufferLength: 30
+            });
+
+            // 监听HLS错误，方便调试
+            hls.on(Hls.Events.ERROR, function (event, data) {
+                console.error("HLS播放错误：", data);
+                // 网络错误尝试重连
+                if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                    layer.msg("视频流连接失败，正在重试...", { icon: 2 });
+                    hls.startLoad();
+                }
+                // 致命错误提示
+                else if (data.fatal) {
+                    switch (data.type) {
+                        case Hls.ErrorTypes.NETWORK_ERROR:
+                            hls.startLoad();
+                            break;
+                        case Hls.ErrorTypes.MEDIA_ERROR:
+                            hls.recoverMediaError();
+                            break;
+                        default:
+                            layer.msg("视频播放出错：" + data.details, { icon: 2 });
+                            hls.destroy();
+                            break;
+                    }
+                }
+            });
+
+            // 加载 m3u8 地址
+            hls.loadSource(m3u8Url);
+            // 绑定到 video 元素
+            hls.attachMedia(video);
+
+            // 监听加载完成事件，自动播放（可选）
+            hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                console.log("视频流加载成功，开始播放");
+                // 自动播放（需用户交互，浏览器限制）
+                video.play().catch(err => {
+                    console.log("自动播放失败（浏览器限制），请手动点击播放：", err);
+                    layer.msg("请手动点击播放按钮开始播放视频", { icon: 1 });
+                });
+            });
+        }
+        // 兼容 Safari 等原生支持 HLS 的浏览器
+        else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            console.log("浏览器原生支持HLS，直接加载");
+            video.src = m3u8Url;
+            // 监听加载完成
+            video.addEventListener('loadedmetadata', function () {
+                video.play().catch(err => {
+                    console.log("自动播放失败，请手动点击播放：", err);
+                    layer.msg("请手动点击播放按钮开始播放视频", { icon: 1 });
+                });
+            });
+            // 监听播放错误
+            video.addEventListener('error', function (err) {
+                console.error("原生HLS播放错误：", err);
+                layer.msg("视频播放失败，请检查流地址是否有效", { icon: 2 });
+            });
+        } else {
+            // 不支持HLS的浏览器提示
+            layer.msg("您的浏览器不支持HLS视频播放，请使用Chrome/Firefox/Safari", { icon: 0 });
+        }
+    });
+
+    window.addEventListener('message', function (event) {
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,844 @@
+<!-- Bootstrap CSS -->
+<script src="/static/js/jquery-2.1.4.min.js"></script>
+<link href="/static/css/bootstrap.min.css" rel="stylesheet">
+<script src="/static/js/layer/layer.js"></script>
+<!-- Font Awesome -->
+<link rel="stylesheet" href="/static/css/all.min.css">
+<script src="/static/js/bootstrap.bundle.min.js"></script>
+{% block extra_css %}
+<style>
+    .annotation-container {
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    #annotationCanvas {
+        max-width: 100%;
+        height: auto;
+        border: 1px solid #ddd;
+        display: block;
+        margin: 0 auto;
+    }
+
+    .annotation-sidebar {
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
+    }
+
+    .canvas-container {
+        position: relative;
+        text-align: center;
+    }
+
+    #fabricCanvas {
+        border: 1px solid #ddd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+
+    <div class="d-flex justify-content-between mb-3">
+        <div class="d-flex align-items-center gap-2">
+            <button id="syncMaterialConfig" class="btn btn-success">
+                <i class="fas fa-save"></i> 应用到所有素材
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-9">
+            <div class="annotation-container">
+                <div class="canvas-container">
+                    <canvas id="fabricCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="annotation-sidebar">
+                <!-- 标签页导航 -->
+                <ul class="nav nav-tabs mb-3" id="sidebarTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="labels-tab" data-bs-toggle="tab"
+                            data-bs-target="#labelsPane" type="button" role="tab">标签管理</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="annotations-tab" data-bs-toggle="tab"
+                            data-bs-target="#annotationsPane" type="button" role="tab">标注框列表</button>
+                    </li>
+                </ul>
+
+                <!-- 标签页内容 -->
+                <div class="tab-content" id="sidebarTabContent">
+                    <!-- 标签管理面板 -->
+                    <div class="tab-pane fade show active" id="labelsPane" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <button class="btn btn-sm btn-primary" data-bs-toggle="modal"
+                                    data-bs-target="#addLabelModal">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="labelsList">
+                                    <!-- 标签将通过JS动态加载 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 标注框列表面板 -->
+                    <div class="tab-pane fade" id="annotationsPane" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>
+                                    <button id="clearAllBtn" class="btn btn-sm btn-outline-danger me-1"
+                                        onclick="clearAllAnnotations()">
+                                        <i class="fas fa-trash-alt"></i> 清空
+                                    </button>
+                                    <button id="toggleAnnotationsBtn" class="btn btn-sm btn-outline-primary"
+                                        onclick="toggleAllAnnotations()">
+                                        <i class="fas fa-eye"></i> 隐藏
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between mb-2">
+                                    <small class="text-muted">标注框数量: <span id="annotationCount">0</span></small>
+                                </div>
+                                <div id="annotationsList">
+                                    <p class="text-muted">暂无标注</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加标签模态框 -->
+    <div class="modal fade" id="addLabelModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加标签</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="labelName" class="form-label">标签名称</label>
+                        <input type="text" class="form-control" id="labelName" placeholder="例如：人、车、狗">
+                    </div>
+                    <div class="mb-3">
+                        <label for="labelColor" class="form-label">标签颜色</label>
+                        <input type="color" class="form-control form-control-color" id="labelColor" value="#0066ff">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="saveLabelBtn">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑标签模态框 -->
+    <div class="modal fade" id="editLabelModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑标签</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="editLabelId">
+                    <div class="mb-3">
+                        <label for="editLabelName" class="form-label">标签名称</label>
+                        <input type="text" class="form-control" id="editLabelName">
+                    </div>
+                    <div class="mb-3">
+                        <label for="editLabelColor" class="form-label">标签颜色</label>
+                        <input type="color" class="form-control form-control-color" id="editLabelColor">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="updateLabelBtn">更新</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+<script>
+    // 全局变量
+    let canvas;
+    let projectId = parseInt('{{ project.id }}');
+    let labels = [];
+    let currentLabel = null;
+    let isDrawing = false;
+    let currentPolygon = null; // 替换原有的rectangle，存储当前绘制的多边形
+    let polygonPoints = []; // 存储当前多边形的顶点集合
+    let materialObj = {
+        id: '{{materials.id}}',
+        config: {}
+    };// 当前配置的对象
+    let config = {
+        annotations: [],
+        labels: []
+    }
+    let canvasInited = false;
+    const rawConfigStr = `{{ material_config | safe }}`;
+    if (rawConfigStr) {
+        try {
+            config = JSON.parse(rawConfigStr);
+            labels = config.labels || [];
+        } catch (e) {
+            console.error('JSON 解析失败', e);
+        }
+    }
+
+
+
+    // 初始化Fabric.js画布
+    document.addEventListener('DOMContentLoaded', function () {
+        // initPage()
+
+        // 绑定标签保存按钮事件
+        document.getElementById('saveLabelBtn').addEventListener('click', createLabel);
+        document.getElementById('updateLabelBtn').addEventListener('click', updateLabel);
+        document.getElementById('syncMaterialConfig').addEventListener('click', syncMaterialConfig)
+    });
+
+
+
+    window.addEventListener('message', (event) => {
+        if (event.data.type === 'load') {
+            initPage()
+            canvasInited = true;
+        }
+        if (event.data.type === 'save') {
+            saveMaterialConfig()
+        }
+    });
+    function initPage() {
+        if (canvasInited) return;
+
+        initCanvas();
+        loadLabels();
+    }
+    function initCanvas() {
+        // 1. 清理旧状态 
+        isDrawing = false;
+        currentPolygon = null;
+        polygonPoints = [];
+
+        if (canvas) {
+            canvas.dispose();
+            canvas = null;
+        }
+
+        const img = new Image();
+        img.src = "{{ url_for('static', filename=materials.cover_image) }}";
+
+        img.onload = function () {
+            const container = document.querySelector('.canvas-container');
+            const maxWidth = container.offsetWidth;
+
+            // 显示缩放比例（只影响视觉）
+            const scale = Math.min(1, maxWidth / img.width);
+
+            // 2. Canvas 使用「原图尺寸」
+            const fabricCanvas = document.getElementById('fabricCanvas');
+            fabricCanvas.width = img.width;
+            fabricCanvas.height = img.height;
+
+            canvas = new fabric.Canvas('fabricCanvas', {
+                selection: true,
+                width: img.width,
+                height: img.height,
+                preserveObjectStacking: true
+            });
+
+            // 3. 设置缩放（统一坐标系）
+            canvas.setZoom(scale);
+
+            // 4. 设置背景图（不再单独 scale）
+            canvas.setBackgroundImage(
+                img.src,
+                canvas.renderAll.bind(canvas),
+                {
+                    originX: 'left',
+                    originY: 'top'
+                }
+            );
+
+            // 多边形绘制
+            // 鼠标点击：添加顶点
+            canvas.on('mouse:down', function (o) {
+                if (!currentLabel) return;
+
+                const target = canvas.findTarget(o.e);
+                if (target) return; // 点击在已有对象上，不绘制
+
+                const pointer = canvas.getPointer(o.e);
+                const point = {
+                    x: Math.round(pointer.x * 100) / 100,
+                    y: Math.round(pointer.y * 100) / 100
+                };
+
+                if (!isDrawing) {
+                    // 开始新多边形
+                    isDrawing = true;
+                    polygonPoints = [point];
+
+                    currentPolygon = new fabric.Polygon(polygonPoints, {
+                        fill: currentLabel.color + '33',
+                        stroke: currentLabel.color,
+                        strokeWidth: 2,
+                        selectable: true,
+                        hasControls: true,
+                        hasBorders: true,
+                        objectCaching: false,
+                        labelId: currentLabel.id
+                    });
+
+                    canvas.add(currentPolygon);
+                } else {
+                    // 添加新顶点
+                    const last = polygonPoints[polygonPoints.length - 1];
+                    const dist = Math.hypot(point.x - last.x, point.y - last.y);
+
+                    if (dist > 5) {
+                        polygonPoints.push(point);
+                        currentPolygon.set({ points: polygonPoints });
+                        canvas.renderAll();
+                    }
+                }
+            });
+
+            // 鼠标移动：实时预览
+            canvas.on('mouse:move', function (o) {
+                if (!isDrawing || !currentPolygon) return;
+
+                const pointer = canvas.getPointer(o.e);
+                const preview = {
+                    x: Math.round(pointer.x * 100) / 100,
+                    y: Math.round(pointer.y * 100) / 100
+                };
+
+                currentPolygon.set({
+                    points: [...polygonPoints, preview]
+                });
+
+                canvas.renderAll();
+            });
+
+            // 双击完成多边形
+            canvas.on('mouse:dblclick', function () {
+                if (!isDrawing) return;
+
+                if (polygonPoints.length < 3) {
+                    canvas.remove(currentPolygon);
+                    layer.msg('至少需要 3 个点');
+                }
+
+                isDrawing = false;
+                currentPolygon.set({ points: polygonPoints });
+                currentPolygon = null;
+                polygonPoints = [];
+
+                canvas.renderAll();
+                updateAnnotationsList();
+            });
+
+            // 对象修改后同步列表
+            canvas.on('object:modified', function () {
+                updateAnnotationsList();
+            });
+        };
+    }
+
+
+    // 清空所有标注
+    function clearAllAnnotations() {
+        if (canvas) {
+            // 确认是否清空所有标注
+            if (confirm('确定要清空所有标注吗？此操作不可撤销。')) {
+                canvas.clear();
+
+                // 重新设置背景图片
+                const img = new Image();
+                img.src = "{{ url_for('static', filename=materials.path) }}";
+
+                img.onload = function () {
+                    const maxWidth = document.querySelector('.canvas-container').offsetWidth;
+                    const scale = Math.min(1, maxWidth / img.width);
+
+                    canvas.setBackgroundImage(img.src, canvas.renderAll.bind(canvas), {
+                        scaleX: scale,
+                        scaleY: scale
+                    });
+
+                    // 更新标注列表
+                    updateAnnotationsList();
+                };
+            }
+        }
+    }
+
+    // 切换显示/隐藏所有标注
+    function toggleAllAnnotations() {
+        if (canvas) {
+            const objects = canvas.getObjects().filter(obj => obj.type === 'polygon'); // 改为筛选多边形
+            if (objects.length === 0) return;
+
+            const isVisible = objects.some(obj => obj.visible !== false);
+
+            objects.forEach(obj => {
+                obj.set('visible', !isVisible);
+            });
+
+            canvas.renderAll();
+
+            // 更新按钮文字
+            const toggleBtn = document.getElementById('toggleAnnotationsBtn');
+            if (toggleBtn) {
+                toggleBtn.innerHTML = isVisible ?
+                    '<i class="fas fa-eye"></i> 显示' :
+                    '<i class="fas fa-eye-slash"></i> 隐藏';
+            }
+        }
+    }
+
+    // 实时更新标注列表
+    function updateAnnotationsList() {
+        if (!canvas) return;
+        const objects = canvas.getObjects().filter(obj => obj.type === 'polygon'); // 改为筛选多边形
+        renderAnnotationsList(objects);
+    }
+
+    // 加载标签
+    function loadLabels() {
+        renderLabels();
+        // 标签加载完成后再加载标注
+        loadAnnotations();
+    }
+
+    // 渲染标签列表（保持不变，与原有功能兼容）
+    function renderLabels() {
+        const labelsList = document.getElementById('labelsList');
+        labelsList.innerHTML = '';
+
+        if (labels.length === 0) {
+            labelsList.innerHTML = '<p class="text-muted">暂无标签</p>';
+            return;
+        }
+
+        labels.forEach(label => {
+            const labelElement = document.createElement('div');
+            labelElement.className = 'd-flex justify-content-between align-items-center  px-20  ';
+
+            labelElement.innerHTML = `
+            <span style='position: absolute;
+    background: ${label.color};
+    width: 8px;
+    height: 8px;
+    border-radius: 25px;left: 3px;'></span><div>
+                ${label.name}
+            </div>
+            <div>
+                <button class="btn btn-sm btn-outline-primary me-1" style="height: 28px;border: 0px;" onclick="selectLabel(${label.id})">
+                    <i class="fas fa-mouse-pointer"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-warning me-1" style="height: 28px;border: 0px;" onclick="editLabel(${label.id})">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" style="height: 28px;border: 0px;" onclick="deleteLabel(${label.id})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+
+            labelsList.appendChild(labelElement);
+
+            // 如果这是当前选中的标签，高亮显示
+            if (currentLabel && currentLabel.id === label.id) {
+                labelElement.classList.add('bg-light');
+            }
+        });
+    }
+
+    // 选择标签
+    function selectLabel(labelId) {
+        currentLabel = labels.find(label => label.id === labelId);
+        renderLabels(); // 重新渲染以显示选中状态
+    }
+
+    // 创建标签
+    function createLabel() {
+        const name = document.getElementById('labelName').value.trim();
+        const color = document.getElementById('labelColor').value;
+        const id = labels.length + 1
+
+        if (!name) {
+            layer.msg('请输入标签名称');
+            return;
+        }
+
+        labels.push({
+            id: id,
+            name: name,
+            color: color
+        });
+        renderLabels();
+        document.getElementById('labelName').value = '';
+        // 关闭模态框
+        const modal = bootstrap.Modal.getInstance(document.getElementById('addLabelModal'));
+        if (modal) {
+            modal.hide();
+        }
+    }
+
+    // 编辑标签（保持不变）
+    function editLabel(labelId) {
+        const label = labels.find(l => l.id === labelId);
+        if (label) {
+            document.getElementById('editLabelId').value = label.id;
+            document.getElementById('editLabelName').value = label.name;
+            document.getElementById('editLabelColor').value = label.color;
+            // 显示模态框
+            new bootstrap.Modal(document.getElementById('editLabelModal')).show();
+        }
+    }
+    // 同步配置
+    function syncMaterialConfig() {
+        if (labels.length == 0 || config.annotations == 0) {
+            layer.msg('请先配置框选区域！')
+            return
+        }
+
+        layer.confirm('确定要同步配置信息吗？', {
+            icon: 3,
+            title: '确认提交',
+            offset: 'center'
+        }, function (index) {
+            layer.close(index);
+            fetch('{{ url_for("main.sync_material_config", project_id=project.id) }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ id: materialObj.id, config: config })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`请求失败（状态码：${response.status}）`);
+                    }
+                    return response.json();
+                })
+                .then(res => {
+                    if (!res.success) {
+                        layer.msg(res.message, {
+                            icon: 2,
+                            time: 3000,
+                            offset: 'center'
+                        });
+                        return;
+                    }
+                    layer.msg('同步成功数量：' + res.count, {
+                        icon: 1,
+                        time: 2000,
+                        offset: 'center'
+                    });
+                })
+                .catch(error => {
+                    const errorMsg = error.message || '删除失败，请重试';
+                    layer.alert(errorMsg, {
+                        title: '删除失败',
+                        icon: 2,
+                        offset: 'center'
+                    });
+                    console.error('删除失败：', error);
+                });
+        });
+    }
+
+    // 更新标签
+    function updateLabel() {
+        const labelId = document.getElementById('editLabelId').value;
+        const name = document.getElementById('editLabelName').value.trim();
+        const color = document.getElementById('editLabelColor').value;
+
+        if (!name) {
+            layer.msg('请输入标签名称');
+            return;
+        }
+        // 更新本地标签列表
+        const labelIndex = labels.findIndex(l => l.id == labelId);
+        if (labelIndex !== -1) {
+            labels[labelIndex] = {
+                id: labelId,
+                name: name,
+                color: color
+            };
+        }
+        renderLabels();
+        // 关闭模态框
+        const modal = bootstrap.Modal.getInstance(document.getElementById('editLabelModal'));
+        if (modal) {
+            modal.hide();
+        }
+    }
+
+    // 删除标签（保持不变）
+    function deleteLabel(labelId) {
+        if (!confirm('确定要删除这个标签吗？')) {
+            return;
+        }
+
+        labels = labels.filter(label => label.id !== labelId);
+        renderLabels();
+    }
+
+    // 渲染标注列表（适配多边形）
+    function renderAnnotationsList(annotations) {
+        const annotationsList = document.getElementById('annotationsList');
+        const annotationCount = document.getElementById('annotationCount');
+
+        // 更新标注数量显示
+        if (annotationCount) {
+            annotationCount.textContent = annotations.length;
+        }
+
+        annotationsList.innerHTML = '';
+
+        if (annotations.length === 0) {
+            annotationsList.innerHTML = '<p class="text-muted">暂无标注</p>';
+            // 更新切换按钮文字
+            const toggleBtn = document.getElementById('toggleAnnotationsBtn');
+            if (toggleBtn) {
+                toggleBtn.innerHTML = '<i class="fas fa-eye"></i> 隐藏';
+            }
+            return;
+        }
+
+        // 适配多边形对象，提取标注信息
+        const displayAnnotations = annotations.map((ann, index) => {
+            if (ann.type === 'polygon') {
+                // 计算多边形包围盒（替代矩形的宽高和位置）
+                const boundingRect = ann.getBoundingRect(); // Fabric.js自带方法，获取多边形包围盒
+                return {
+                    label_id: ann.labelId,
+                    boundingRect: boundingRect,
+                    points: ann.points // 保留原始顶点信息，用于保存
+                };
+            }
+            return ann;
+        });
+
+        displayAnnotations.forEach((ann, index) => {
+            const label = labels.find(l => l.id === ann.label_id);
+            if (!label || !ann.boundingRect) return;
+
+            // 提取包围盒信息，用于显示
+            const { left, top, width, height } = ann.boundingRect;
+            const pixelLeft = Math.max(0, Math.round(left)) || 0;
+            const pixelTop = Math.max(0, Math.round(top)) || 0;
+            const pixelWidth = Math.max(0, Math.round(width)) || 0;
+            const pixelHeight = Math.max(0, Math.round(height)) || 0;
+
+            const annotationElement = document.createElement('div');
+            annotationElement.className = 'd-flex justify-content-between align-items-center mb-2 p-2 border rounded';
+            annotationElement.style.borderLeft = `4px solid ${label.color}`;
+            // 为每个标注元素添加唯一ID，便于删除
+            annotationElement.id = `annotation-${index}`;
+
+            annotationElement.innerHTML = `
+            <div>
+                <strong>${label.name}</strong><br>
+                <small>位置: (${pixelLeft}, ${pixelTop})</small><br>
+                <small>包围盒: ${pixelWidth}px × ${pixelHeight}px</small><br>
+                <small>顶点数: ${ann.points.length} 个</small>
+            </div>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteAnnotation(${index})">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+
+            annotationsList.appendChild(annotationElement);
+        });
+
+        // 更新切换按钮文字
+        const toggleBtn = document.getElementById('toggleAnnotationsBtn');
+        if (toggleBtn) {
+            toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i> 隐藏';
+        }
+    }
+
+    // 删除标注（适配多边形）
+    function deleteAnnotation(index) {
+        const objects = canvas.getObjects().filter(obj => obj.type === 'polygon');
+        if (index < objects.length) {
+            // 从画布上移除标注
+            canvas.remove(objects[index]);
+            // 实时更新标注列表
+            updateAnnotationsList();
+        }
+    }
+
+    // 保存标注（适配多边形，保存顶点信息）
+    function saveMaterialConfig() {
+        if (!canvas) {
+            layer.msg('画布尚未初始化');
+            return;
+        }
+
+        const objects = canvas.getObjects();
+        const annotations = [];
+
+        objects.forEach(obj => {
+            if (obj.type === 'polygon') {
+                // 1. 提取多边形顶点（归一化处理，适配原有后端逻辑）
+                const normalizedPoints = obj.points.map(point => ({
+                    x: Math.max(0, Math.min(1, point.x / canvas.width)),
+                    y: Math.max(0, Math.min(1, point.y / canvas.height))
+                }));
+
+                // 2. 同时保留包围盒归一化信息（兼容原有逻辑，可选）
+                const boundingRect = obj.getBoundingRect();
+                const centerX = Math.max(0, Math.min(1, (boundingRect.left + boundingRect.width / 2) / canvas.width));
+                const centerY = Math.max(0, Math.min(1, (boundingRect.top + boundingRect.height / 2) / canvas.height));
+                const normWidth = Math.max(0, Math.min(1, boundingRect.width / canvas.width));
+                const normHeight = Math.max(0, Math.min(1, boundingRect.height / canvas.height));
+
+                annotations.push({
+                    label_id: obj.labelId,
+                    x: centerX, // 包围盒中心X（兼容原有）
+                    y: centerY, // 包围盒中心Y（兼容原有）
+                    width: normWidth, // 包围盒宽度（兼容原有）
+                    height: normHeight, // 包围盒高度（兼容原有）
+                    points: normalizedPoints, // 新增：多边形归一化顶点列表（核心）
+                    type: 'polygon' // 新增：标记标注类型，便于后端区分
+                });
+            }
+        });
+
+        // 此处可添加发送到后端的逻辑，与原有矩形标注保存逻辑兼容
+        console.log('保存的多边形标注：', annotations);
+        if (annotations.length == 0) {
+            layer.msg('请先设置配置区域')
+            return
+        }
+        config.annotations = annotations
+        config.labels = labels
+        fetch('{{ url_for("main.save_material_config", project_id=project.id) }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                id: materialObj.id,
+                config: config
+            })
+        }).then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    layer.msg('保存成功！')
+                    window.parent.postMessage({ type: 'close' }, window.location.origin)
+                } else {
+                    layer.msg('保存失败！')
+                }
+            }).catch(error => {
+                console.error('保存推理素材配置失败:', error);
+            });
+    }
+
+    // 加载标注（适配多边形，支持从后端加载多边形标注）
+    function loadAnnotations() {
+        let annotations = config.annotations;
+
+        // 确保画布已初始化
+        if (!canvas) {
+            setTimeout(() => loadAnnotations(), 100);
+            return;
+        }
+
+        // 确保背景已设置
+        if (!canvas.backgroundImage) {
+            setTimeout(() => loadAnnotations(), 100);
+            return;
+        }
+        console.log('annotations', annotations)
+
+        const existCount = canvas.getObjects().filter(o => o.type === 'polygon').length;
+        if (existCount > 0) return;
+
+        // 加载多边形标注
+        annotations.forEach(ann => {
+            // 过滤出多边形标注，兼容原有矩形标注（可选）
+            if (ann.type !== 'polygon' && !ann.points) return;
+
+            const label = labels.find(l => l.id === ann.label_id);
+            if (!label) return;
+
+            // 1. 处理顶点信息（优先加载原始顶点）
+            let polygonPoints = [];
+            if (ann.points && ann.points.length >= 3) {
+                // 反归一化，将顶点坐标转换为画布像素坐标
+                polygonPoints = ann.points.map(point => ({
+                    x: Math.max(0, point.x * canvas.width),
+                    y: Math.max(0, point.y * canvas.height)
+                }));
+            } else {
+                // 兼容原有矩形标注数据，转换为矩形多边形（可选）
+                const x = Math.max(0, Math.min(1, parseFloat(ann.x) || 0));
+                const y = Math.max(0, Math.min(1, parseFloat(ann.y) || 0));
+                const width = Math.max(0, Math.min(1, parseFloat(ann.width) || 0));
+                const height = Math.max(0, Math.min(1, parseFloat(ann.height) || 0));
+
+                const left = x * canvas.width - (width * canvas.width) / 2;
+                const top = y * canvas.height - (height * canvas.height) / 2;
+                const pixelWidth = width * canvas.width;
+                const pixelHeight = height * canvas.height;
+
+                // 构建矩形的四个顶点
+                polygonPoints = [
+                    { x: left, y: top },
+                    { x: left + pixelWidth, y: top },
+                    { x: left + pixelWidth, y: top + pixelHeight },
+                    { x: left, y: top + pixelHeight }
+                ];
+            }
+
+            // 2. 创建Fabric.js多边形对象
+            const polygon = new fabric.Polygon(polygonPoints, {
+                fill: label.color + '33',
+                stroke: label.color,
+                strokeWidth: 2,
+                transparentCorners: false,
+                cornerColor: 'rgba(0,0,0,0.5)',
+                cornerSize: 12,
+                hasControls: true,
+                hasBorders: true,
+                selectable: true,
+                labelId: ann.label_id,
+                type: 'polygon'
+            });
+
+            canvas.add(polygon);
+        });
+
+        canvas.renderAll();
+
+        // 加载完成后更新标注列表
+        updateAnnotationsList();
+    }
+
+</script>
+{% endblock %}

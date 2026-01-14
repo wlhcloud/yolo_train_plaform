@@ -1,0 +1,106 @@
+<!-- templates/project_nav.html -->
+{% set current_nav_key = current_nav_key|default("images") %}
+
+<div class="col-12">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">项目列表</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('main.project_detail', project_id=project.id) }}">{{
+                    project.name }}</a></li>
+            {# 用后端传递的 current_page 渲染面包屑 #}
+            <li class="breadcrumb-item active" aria-current="page" id="breadcrumbActive"></li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>AI模型训练平台 - <span id="pageTitle"></span></h1>
+    </div>
+</div>
+<div class="col-2">
+    <ul class="nav flex-column" id="projectNav">
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('main.project_detail', project_id=project.id) }}" data-nav-key="detail"
+                data-text="项目概览">
+                <i class="fas fa-tachometer-alt"></i> 项目概览
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('main.project_images', project_id=project.id) }}" data-nav-key="images"
+                data-text="训练素材管理">
+                <i class="fas fa-images"></i> 训练素材管理
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('main.annotate', project_id=project.id) }}" data-nav-key="annotate"
+                data-text="训练素材标注">
+                <i class="fas fa-object-group"></i> 训练素材标注
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('main.project_dataset', project_id=project.id) }}"
+                data-nav-key="dataset" data-text="数据集划分">
+                <i class="fas fa-database"></i> 数据集划分
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('main.project_train', project_id=project.id) }}" data-nav-key="train"
+                data-text="模型训练">
+                <i class="fas fa-brain"></i> 模型训练
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if current_nav_key == 'export' %}active{% endif %}"
+                href="{{ url_for('main.project_export', project_id=project.id) }}" data-nav-key="export"
+                data-text="模型导出">
+                <i class="fas fa-file-export"></i> 模型导出
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-text="推理素材管理"
+                href="{{ url_for('main.inference_material', project_id=project.id) }}" data-nav-key="material">
+                <i class="fas fa-layer-group"></i> 推理素材管理
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('main.model_inference', project_id=project.id) }}"
+                data-nav-key="inference" data-text="模型推理">
+                <i class="fas fa-magic"></i> 模型推理
+            </a>
+        </li>
+    </ul>
+</div>
+
+{# 保留之前的前端JS，用于点击时的即时更新（非跳转场景） #}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        function setNavActiveByKey(activeKey) {
+            const allLinks = document.querySelectorAll('#projectNav .nav-link');
+            allLinks.forEach(link => link.classList.remove('active'));
+
+            const activeLink = document.querySelector(`#projectNav .nav-link[data-nav-key="${activeKey}"]`);
+
+            if (activeLink) {
+                activeLink.classList.add('active');
+
+                const text = activeLink.dataset.text;
+                const breadcrumbEl = document.getElementById('breadcrumbActive');
+                if (breadcrumbEl) breadcrumbEl.textContent = text;
+
+                const titleEl = document.getElementById('pageTitle');
+                if (titleEl) titleEl.textContent = text;
+            }
+        }
+
+        setNavActiveByKey('{{current_nav_key}}')
+
+        // const navLinks = document.querySelectorAll('#projectNav .nav-link');
+        // navLinks.forEach(link => {
+        //     link.addEventListener('click', function (e) {
+        //         const navKey = this.dataset.navKey;
+        //         const navText = this.dataset.text;
+        //         setNavActiveByKey(navKey);
+        //         updatePageContent(navText);
+        //     });
+        // });
+    });
+</script>

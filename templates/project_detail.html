@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}项目详情 - {{ project.name }} - AI模型训练平台{% endblock %}
+
+{% block content %}
+
+<div class="container" style="max-width: 100%;">
+    <div class="row">
+        {% set current_page = '项目概览'%}
+        {% set current_nav_key = 'detail'%}
+        {% include "project_nav.html"%}
+        <div class="col-10">
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <i class="fas fa-chart-bar me-1"></i>项目统计
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3 mb-3">
+                                    <div class="border rounded p-3 text-center">
+                                        <div class="display-6">{{ imgs_count }}</div>
+                                        <div class="text-muted">图片总数</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <div class="border rounded p-3 text-center">
+                                        <div class="display-6">{{ label_imgs_count.label_imgs_count }}</div>
+                                        <div class="text-muted">已标注</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <div class="border rounded p-3 text-center">
+                                        <div class="display-6">{{ imgs_count-label_imgs_count.label_imgs_count }}</div>
+                                        <div class="text-muted">未标注</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <div class="border rounded p-3 text-center">
+                                        <div class="display-6">{{ annotation_count.annotation_count }}</div>
+                                        <div class="text-muted">标注框</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-images me-1"></i>最近上传的图片
+                            <a href="{{ url_for('main.project_images', project_id=project.id) }}"
+                                class="float-end small">查看全部</a>
+                        </div>
+                        <div class="card-body">
+                            {% if images_pagination %}
+                            <div class="row">
+                                {% for image in images_pagination %}
+                                <div class="col-md-2 col-sm-3 col-4 mb-3">
+                                    <div class="position-relative">
+                                        <a href="{{ url_for('main.annotate_image', project_id=project.id, image_id=image.id) }}"
+                                            class="d-block">
+                                            <img src="{{ url_for('static', filename=image.path) }}"
+                                                class="img-fluid rounded" style="aspect-ratio: 1/1; object-fit: cover;"
+                                                alt="{{ image.original_filename }}">
+                                        </a>
+                                        <div class="position-absolute top-0 end-0 m-1">
+                                            {% if image.annotations|length > 0 %}
+                                            <span class="badge bg-success"
+                                                title="已标注 {{ image.annotations|length }} 个对象">
+                                                <i class="fas fa-check"></i>
+                                            </span>
+                                            {% else %}
+                                            <span class="badge bg-secondary" title="未标注">
+                                                <i class="fas fa-times"></i>
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-images fa-3x text-muted mb-3"></i>
+                                <p class="text-muted">暂无图片，请先上传图片</p>
+                                <a href="{{ url_for('main.project_images', project_id=project.id) }}"
+                                    class="btn btn-primary">
+                                    <i class="fas fa-upload"></i> 上传图片
+                                </a>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-4">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <i class="fas fa-tasks me-1"></i>项目进度
+                        </div>
+                        <div class="card-body">
+                            {% if imgs_count > 0 %}
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span>标注进度</span>
+                                    <span>{{ "{:.1f}".format((label_imgs_count.label_imgs_count / imgs_count) * 100)
+                                        }}%</span>
+                                </div>
+                                <div class="progress">
+                                    <div class="progress-bar" role="progressbar"
+                                        style="width: {{ (label_imgs_count.label_imgs_count / imgs_count) * 100 }}%"
+                                        aria-valuenow="{{ (label_imgs_count.label_imgs_count / imgs_count) * 100 }}"
+                                        aria-valuemin="0" aria-valuemax="100">
+                                    </div>
+                                </div>
+                                <div class="text-muted small mt-1">
+                                    {{ label_imgs_count.label_imgs_count }} / {{ imgs_count }} 张图片已标注
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-3">
+                                <p class="text-muted">暂无图片</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-info-circle me-1"></i>项目信息
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-unstyled">
+                                <li class="mb-2">
+                                    <strong>创建时间:</strong>
+                                    <span class="float-end">
+                                        {% if project.created_at %}
+                                        {{ project.created_at | beijing_time }}
+                                        {% else %}
+                                        未知
+                                        {% endif %}
+                                    </span>
+                                </li>
+                                <li class="mb-2">
+                                    <strong>最后更新:</strong>
+                                    <span class="float-end">{{ project.updated_at.strftime('%Y-%m-%d %H:%M') if
+                                        project.updated_at else '未知' }}</span>
+                                </li>
+                                <li class="mb-2">
+                                    <strong>标签类别:</strong>
+                                    <span class="float-end">{{ label_count.label_count }}</span>
+                                </li>
+                            </ul>
+                            <div class="d-grid gap-2">
+                                <a href="{{ url_for('main.project_images', project_id=project.id) }}"
+                                    class="btn btn-outline-primary">
+                                    <i class="fas fa-images"></i> 管理图片
+                                </a>
+                                <a href="{{ url_for('main.annotate', project_id=project.id) }}"
+                                    class="btn btn-outline-success">
+                                    <i class="fas fa-object-group"></i> 开始标注
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+{% endblock %}

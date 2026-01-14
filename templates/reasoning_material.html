@@ -1,0 +1,680 @@
+{% extends "base.html" %}
+
+{% block title %}推理素材管理 - {{ project.name }} - AI模型训练平台{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* 复用现有图片管理的通用样式，新增少量专属样式 */
+    .image-card {
+        transition: transform 0.2s;
+    }
+
+    .image-card:hover {
+        transform: scale(1.02);
+    }
+
+    .drop-zone {
+        border: 2px dashed #007bff;
+        background-color: #f8f9fa;
+        border-radius: 0.375rem;
+        padding: 2rem;
+        text-align: center;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .drop-zone.dragover {
+        background-color: #e9ecef;
+        border-color: #0056b3;
+    }
+
+    .file-info {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        padding: 20px 0;
+    }
+
+    .pagination .page-item {
+        margin: 0 2px;
+    }
+
+    .pagination .page-link {
+        color: #007bff;
+        padding: 0.5rem 0.75rem;
+        text-decoration: none;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+    }
+
+    .pagination .page-item.active .page-link {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: white;
+    }
+
+    .pagination .page-item.disabled .page-link {
+        color: #6c757d;
+        pointer-events: none;
+        background-color: #fff;
+        border-color: #dee2e6;
+    }
+
+    .image-checkbox {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+    }
+
+    .image-card.selected {
+        border: 2px solid #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, .25);
+    }
+
+    .action-buttons {
+        margin-bottom: 1rem;
+    }
+
+    .action-buttons .btn {
+        margin-right: 0.5rem;
+    }
+
+    .rtsp-long-tip {
+        font-size: 0.875rem;
+        color: #fd7e14;
+        margin-top: 0.5rem;
+    }
+
+    /* Iframe容器样式复用与优化 */
+    #iframeContainer {
+        width: 100%;
+        height: 600px;
+        margin-top: 10px;
+        border: 1px solid #eee;
+        border-radius: 4px;
+    }
+
+    /* ========== 核心：左右分栏配置弹窗样式 ========== */
+    .material-config-modal .modal-content {
+        border: none;
+        border-radius: 0.75rem;
+        box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.15);
+        max-width: 1200px;
+        margin: 2rem auto;
+        height: 80vh;
+        overflow: hidden;
+    }
+
+    .material-config-modal .modal-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+        padding: 1.25rem 1.5rem;
+    }
+
+    .material-config-modal .modal-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #212529;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .material-config-modal .modal-body {
+        padding: 0;
+        height: calc(80vh - 136px);
+        display: flex;
+    }
+
+    .material-config-modal .modal-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid #e9ecef;
+        background-color: #f8f9fa;
+    }
+
+    /* 左侧：图片预览与框选区域 */
+    .image-select-area {
+        width: 65%;
+        height: 100%;
+        padding: 1rem;
+        border-right: 1px solid #e9ecef;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #fafbfc;
+    }
+
+    .image-preview-container {
+        width: 100%;
+        height: 90%;
+        border: 2px dashed #dee2e6;
+        border-radius: 0.5rem;
+        overflow: hidden;
+        position: relative;
+        background-color: #fff;
+        cursor: crosshair;
+    }
+
+    .image-preview {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: none;
+    }
+
+    .image-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #6c757d;
+    }
+
+    /* 框选区域样式 */
+    .selection-box {
+        position: absolute;
+        border: 2px solid #007bff;
+        background-color: rgba(0, 123, 255, 0.1);
+        pointer-events: none;
+        display: none;
+    }
+
+    /* 右侧：分类配置区域 */
+    .category-config-area {
+        width: 35%;
+        height: 100%;
+        padding: 1.5rem;
+        overflow-y: auto;
+        background-color: #fff;
+    }
+
+    .category-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .material-info-card {
+        background-color: #f8f9fa;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .material-info-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .material-info-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .info-label {
+        color: #6c757d;
+        font-weight: 500;
+    }
+
+    .info-value {
+        color: #212529;
+        word-break: break-all;
+        text-align: right;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 100%;">
+    <div class="row">
+        {% set current_nav_key = 'material'%}
+        {% include "project_nav.html"%}
+        <div class="col-10">
+            <!-- 核心：推理素材Tab切换（图片/视频/RTSP），延续Iframe加载模式 -->
+            <div class="row">
+                <ul class="nav nav-tabs" id="inferenceTabContainer">
+                    <li class="nav-item">
+                        <!-- 图片推理：支持上传+服务器解析 -->
+                        <a class="nav-link active" id="infer-image-tab" aria-current="page" onclick="inferenceTab(this)"
+                            data-iframe-url="{{ url_for('main.infer_image_material', project_id=project.id) if project else '' }}">
+                            <i class="fas fa-file-image"></i> 图片推理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <!-- 视频推理：支持上传+服务器解析 -->
+                        <a class="nav-link" id="infer-video-tab" onclick="inferenceTab(this)"
+                            data-iframe-url="{{ url_for('main.infer_video_material', project_id=project.id) if project else '' }}">
+                            <i class="fas fa-file-video"></i> 视频推理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <!-- RTSP推理：支持添加地址，长期推理提示 -->
+                        <a class="nav-link" id="infer-rtsp-tab" onclick="inferenceTab(this)"
+                            data-iframe-url="{{ url_for('main.infer_rtsp_material', project_id=project.id) if project else '' }}">
+                            <i class="fas fa-stream"></i> RTSP推理
+                        </a>
+                    </li>
+                </ul>
+
+                <!-- Iframe容器：承载三种推理素材的具体页面，与图片管理页面样式一致 -->
+                <div id="iframeContainer" style="width: 100%;height: 550px;">
+                    <!-- 初始化内容由JS加载 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade material-config-modal" id="materialConfigModal" tabindex="-1"
+        aria-labelledby="materialConfigModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="materialConfigModalLabel">
+                        <i class="fas fa-cog me-1"></i> 素材配置与区域框选
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="materialConfigContainer">
+                    <iframe id="materialConfigFrame" src="material_config.html"
+                        style="width: 100%; height: 500px; border: none;"></iframe>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="saveMaterialConfigBtn"
+                        onclick="saveMaterialConfig()">保存配置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+</div>
+<!-- 结果弹窗：包含加载推理结果的iframe -->
+<div class="modal fade" id="resultModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">推理结果详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="height: 70vh; overflow: hidden;">
+                <!-- 弹窗iframe：加载你的result接口模板页面 -->
+                <iframe id="resultIframe" width="100%" height="100%" frameborder="0"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!--服务器解析弹框-->
+<div class="modal fade" id="serverPathModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form id="serverPathForm">
+                <input type="text" class="form-control" hidden name="type">
+
+                <div class="modal-header">
+                    <h5 class="modal-title">从服务器解析目录</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+
+                    <div class="mb-3">
+                        <label class="form-label">服务器目录路径：</label>
+                        <span>
+                            解析的一级目录为素材的分类
+                        </span>
+                        <input type="text" class="form-control" name="path" placeholder="/data/images" required>
+                    </div>
+
+                    <!-- 解析结果渲染容器 -->
+                    <ul class="list-group" id="serverFileList"></ul>
+
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" onclick="analysisServerFile()" class="btn btn-primary">解析</button>
+                    <button type="button" id="saveSelectedBtn" onclick="saveServerFiles()"
+                        class="btn btn-success">保存</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+
+            </form>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 全局变量：记录当前推理状态、框选相关参数、当前素材信息
+    let isInferring = false;
+    let startX = 0, startY = 0, isSelecting = false;
+    let currentMaterial = null;
+    const projectId = '{{project.id}}'
+    const selectionBox = document.getElementById('selectionBox');
+    const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+
+    // 页面加载完成后，初始化默认Tab与事件绑定
+    document.addEventListener('DOMContentLoaded', function () {
+        const defaultTab = document.getElementById('infer-image-tab');
+        const saveSelectedBtn = document.getElementById('saveSelectedBtn')
+        if (defaultTab) {
+            inferenceTab(defaultTab);
+        }
+    });
+
+
+    function saveServerFiles() {
+        const selected = [];
+        document.querySelectorAll('#serverFileList input[name="selected"]:checked')
+            .forEach(cb => selected.push(cb.value));
+
+        if (selected.length === 0) {
+            layer.msg('请选择文件');
+            return;
+        }
+
+        // 提交到后端保存
+        const formData = new FormData();
+        selected.forEach(f => formData.append('files', f));
+
+        fetch('{{ url_for("main.save_server_files",project_id= project.id)}}', {
+            method: 'POST',
+            body: formData
+        })
+            .then(res => res.json())
+            .then(res => {
+                if (res.success) {
+                    layer.msg('保存成功！');
+                    // 可选择关闭 Modal 或刷新列表
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('serverPathModal'));
+                    modal.hide();
+                } else {
+                    layer.msg('保存失败！');
+                }
+            })
+            .catch(err => {
+                console.error('保存失败：', err);
+                layer.msg('保存失败！');
+            });
+    };
+
+    // 解析服务器文件
+    function analysisServerFile() {
+        const form = document.getElementById('serverPathForm');
+        const formData = new FormData(form);
+        formData.append('type', 'image')
+
+        fetch('{{ url_for("main.parse_server_dir") }}', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(response => {
+                if (!response.success) {
+                    layer.msg('解析失败！');
+                    return;
+                }
+
+                const items = response.data.items || [];
+                const ul = document.getElementById('serverFileList');
+                ul.innerHTML = ''; // 先清空列表
+
+                if (items.length === 0) {
+                    ul.innerHTML = '<li class="list-group-item text-muted">目录为空</li>';
+                    return;
+                }
+
+                items.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item';
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'form-check-input me-2';
+                    checkbox.value = item.path;
+                    checkbox.name = 'selected';
+
+                    li.appendChild(checkbox);
+
+                    // 根据类型显示图标
+                    const icon = document.createElement('span');
+                    icon.textContent = item.is_dir ? '📁 ' : '🖼️ ';
+                    li.appendChild(icon);
+
+                    const text = document.createTextNode(item.name);
+                    li.appendChild(text);
+
+                    ul.appendChild(li);
+                });
+            })
+            .catch(error => {
+                console.log('解析失败：', error)
+                layer.msg('解析失败！')
+            })
+            .finally(() => {
+            })
+    }
+
+    /**
+     * 核心：打开素材配置弹窗（替代原抽屉，供Iframe内部页面调用，暴露全局方法）
+     * @param {Object} material - 素材对象，包含id、path、filename属性
+     */
+    function openConfigDrawer(material) {
+        if (!material || !material.id || !material.path || !material.filename) {
+            alert('无效的素材信息，无法打开配置弹窗');
+            return;
+        }
+
+        // 保存当前素材信息
+        currentMaterial = material;
+        console.log('当前待配置素材：', currentMaterial);
+
+
+        const staticBaseUrl = `${window.location.origin}/static/`;
+        const imageSrc = staticBaseUrl + `${material.path}`; // 或使用后端提供的素材访问接口
+
+        // 获取iframe元素
+        const materialConfigFrame = document.getElementById('materialConfigFrame');
+        materialConfigFrame.src = `/api/material/${projectId}/config/${material.id}`;
+
+        const materialConfigModalEL = document.getElementById('materialConfigModal');
+        const annotateModal = new bootstrap.Modal(materialConfigModalEL);
+
+        materialConfigModal.addEventListener('shown.bs.modal', () => {
+            materialConfigFrame.contentWindow.postMessage({ type: 'load' }, window.location.origin);
+        });
+
+        materialConfigFrame.onload = function () {
+            const modal = new bootstrap.Modal(materialConfigModalEL);
+            modal.show();
+        };
+    }
+
+    /**
+     * 推理素材Tab切换
+     */
+    function inferenceTab(tabLink) {
+        // 阻止a标签默认跳转行为
+        event.preventDefault();
+
+        // 移除所有Tab的active高亮状态
+        const allTabLinks = document.querySelectorAll('#inferenceTabContainer .nav-link');
+        allTabLinks.forEach(link => {
+            link.classList.remove('active');
+            link.removeAttribute('aria-current');
+        });
+
+        // 给当前点击的Tab添加active高亮状态
+        tabLink.classList.add('active');
+        tabLink.setAttribute('aria-current', 'page');
+
+        const iframeUrl = tabLink.dataset.iframeUrl;
+        const iframeContainer = document.getElementById('iframeContainer');
+
+        if (!iframeUrl || iframeUrl === '#') {
+            iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #999;">暂无可用内容</div>';
+            return;
+        }
+
+        let iframe = iframeContainer.querySelector('iframe');
+        if (iframe) {
+            iframe.src = iframeUrl;
+        } else {
+            // 动态创建新iframe并插入容器，保持与图片管理页面一致的配置
+            iframe = document.createElement('iframe');
+            iframe.id = 'materialIframe'
+            iframe.src = iframeUrl;
+            iframe.width = '100%';
+            iframe.height = '100%';
+            iframe.frameBorder = '0';
+            iframe.allowFullscreen = true;
+
+            iframe.onload = function () {
+                console.log(`[${tabLink.innerText}] 推理素材页面加载完成`);
+            };
+            iframe.onerror = function () {
+                iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #f56c6c;">内容加载失败，请重试</div>';
+            };
+
+            iframeContainer.innerHTML = '';
+            iframeContainer.appendChild(iframe);
+        }
+    }
+
+    /**
+     * 删除推理素材
+     */
+    function deleteMaterial(ids) {
+        layer.confirm('你确定要删除吗？', {
+            icon: 3,
+            title: '确认提交',
+            offset: 'center'
+        }, function (index) {
+            layer.close(index);
+            fetch('{{ url_for("main.delete_material", project_id=project.id) }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ ids: ids })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`请求失败（状态码：${response.status}）`);
+                    }
+                    return response.json();
+                })
+                .then(res => {
+                    if (!res.success) {
+                        layer.msg(res.message, {
+                            icon: 2,
+                            time: 3000,
+                            offset: 'center'
+                        });
+                        return;
+                    }
+                    layer.msg('删除成功', {
+                        icon: 1,
+                        time: 2000,
+                        offset: 'center'
+                    });
+                    setTimeout(() => {
+                        sendMaterialMessage('refrensh') // 修正拼写错误：refrensh → refresh
+                    }, 2000)
+                })
+                .catch(error => {
+                    const errorMsg = error.message || '删除失败，请重试';
+                    layer.alert(errorMsg, {
+                        title: '删除失败',
+                        icon: 2,
+                        offset: 'center'
+                    });
+                    console.error('删除失败：', error);
+                });
+        });
+    }
+
+    /*
+    发送消息给素材iframe
+    */
+    function sendMaterialMessage(type, data = null) {
+        const materialIframe = document.getElementById('materialIframe');
+        if (materialIframe && materialIframe.contentWindow) {
+            materialIframe.contentWindow.postMessage(
+                { type: type, data: data },
+                window.location.origin
+            );
+        }
+    }
+    // 保存素材配置
+    function saveMaterialConfig() {
+        const materialConfigFrame = document.getElementById('materialConfigFrame');
+        if (materialConfigFrame && materialConfigFrame.contentWindow) {
+            materialConfigFrame.contentWindow.postMessage(
+                { type: 'save' },
+                window.location.origin
+            );
+        }
+    }
+
+    function closeMaterialConfigModal() {
+        const materialConfigModalEL = document.getElementById('materialConfigModal');
+        // 关闭模态框
+        const modal = bootstrap.Modal.getInstance(materialConfigModalEL);
+        if (modal) {
+            modal.hide();
+        }
+    }
+
+    // 监听Iframe发送的消息
+    window.addEventListener('message', function (event) {
+        if (!window.ALLOWED_ORIGINS.includes(event.origin)) return;
+
+        if (event.data.type === 'deleteMaterial') {
+            const ids = event.data.data;
+            deleteMaterial(ids);
+        }
+        if (event.data.type === 'close') {
+            closeMaterialConfigModal();
+        }
+        if (event.data.type === 'openResultModal') {
+            const { projectId, materialId } = event.data;
+            // 1. 设置弹窗iframe的src为你的结果接口
+            const resultIframe = document.getElementById('resultIframe');
+            resultIframe.src = `/api/inference/${projectId}/result/${materialId}`;
+
+            // 2. 打开弹窗
+            const modal = new bootstrap.Modal(document.getElementById('resultModal'));
+            modal.show();
+        }
+        if (event.data.type === 'openServerFileModal') {
+            const { projectId, fileType } = event.data;
+            console.log(projectId, fileType)
+            // 打开弹窗
+            const modal = new bootstrap.Modal(document.getElementById('serverPathModal'));
+            modal.show();
+
+            const typeInput = document.querySelector("#serverPathForm input[name='type']");
+            typeInput.value = fileType;  // 给它赋值
+
+        }
+    });
+</script>
+{% endblock %}

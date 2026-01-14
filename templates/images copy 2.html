@@ -1,0 +1,655 @@
+{% extends "base.html" %}
+
+{% block title %}图片管理 - {{ project.name }} - AI模型训练平台{% endblock %}
+
+{% block extra_css %}
+<style>
+    .image-card {
+        transition: transform 0.2s;
+    }
+
+    .image-card:hover {
+        transform: scale(1.02);
+    }
+
+    .image-placeholder {
+        background-color: #f8f9fa;
+        border: 2px dashed #dee2e6;
+        border-radius: 0.375rem;
+        text-align: center;
+        padding: 2rem;
+        margin-bottom: 1rem;
+    }
+
+    .drop-zone {
+        border: 2px dashed #007bff;
+        background-color: #f8f9fa;
+        border-radius: 0.375rem;
+        padding: 2rem;
+        text-align: center;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .drop-zone.dragover {
+        background-color: #e9ecef;
+        border-color: #0056b3;
+    }
+
+    .file-info {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+
+    /* 分页样式 */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        padding: 20px 0;
+    }
+
+    .pagination .page-item {
+        margin: 0 2px;
+    }
+
+    .pagination .page-link {
+        color: #007bff;
+        padding: 0.5rem 0.75rem;
+        text-decoration: none;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+    }
+
+    .pagination .page-item.active .page-link {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: white;
+    }
+
+    .pagination .page-item.disabled .page-link {
+        color: #6c757d;
+        pointer-events: none;
+        background-color: #fff;
+        border-color: #dee2e6;
+    }
+
+    /* 多选相关样式 */
+    .image-checkbox {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+    }
+
+    .image-card.selected {
+        border: 2px solid #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, .25);
+    }
+
+    .action-buttons {
+        margin-bottom: 1rem;
+    }
+
+    .action-buttons .btn {
+        margin-right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">项目列表</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('main.project_detail', project_id=project.id) }}">{{
+                project.name }}</a></li>
+        <li class="breadcrumb-item active" aria-current="page">图片管理</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>AI模型训练平台 - 图片管理</h1>
+</div>
+
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('main.project_detail', project_id=project.id) }}">
+            <i class="fas fa-tachometer-alt"></i> 项目概览
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link active" href="{{ url_for('main.project_images', project_id=project.id) }}">
+            <i class="fas fa-images"></i> 图片管理
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('main.annotate', project_id=project.id) }}">
+            <i class="fas fa-tags"></i> 图片标注
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('main.project_dataset', project_id=project.id) }}">
+            <i class="fas fa-database"></i> 数据集管理
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('main.project_train', project_id=project.id) }}">
+            <i class="fas fa-robot"></i> 模型训练
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('main.project_export', project_id=project.id) }}">
+            <i class="fas fa-file-export"></i> 模型导出
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('main.model_inference', project_id=project.id) }}">
+            <i class="fas fa-magic"></i> 模型推理
+        </a>
+    </li>
+</ul>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>上传图片</span>
+                    <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#uploadHelp" aria-expanded="false" aria-controls="uploadHelp">
+                        <i class="fas fa-question-circle"></i> 帮助
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="collapse" id="uploadHelp">
+                    <div class="alert alert-info">
+                        <h6>上传说明：</h6>
+                        <ul>
+                            <li>支持单张/多张图片上传</li>
+                            <li>支持ZIP压缩包批量上传</li>
+                            <li>支持拖拽上传</li>
+                            <li>支持的格式：PNG, JPG, JPEG</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- RTSP截图按钮 -->
+                <div class="mb-3">
+                    <a href="{{ url_for('main.rtsp_capture', project_id=project.id) }}" class="btn btn-info">
+                        <i class="fas fa-video"></i> RTSP截图
+                    </a>
+                </div>
+
+                <!-- 拖拽上传区域 -->
+                <div id="dropZone" class="drop-zone">
+                    <i class="fas fa-cloud-upload-alt fa-3x mb-3 text-primary"></i>
+                    <h5>拖拽图片到此处上传</h5>
+                    <p class="text-muted">或点击下方按钮选择文件</p>
+                    <div class="file-info" id="fileInfo"></div>
+                </div>
+
+                <form id="uploadForm" action="{{ url_for('main.upload_images', project_id=project.id) }}" method="POST"
+                    enctype="multipart/form-data">
+                    <div class="d-flex flex-wrap gap-2">
+                        <input type="file" class="form-control" id="images" name="images" multiple accept="image/*">
+                        <input type="file" class="form-control" id="zip_file" name="zip_file" accept=".zip">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-upload"></i> 上传
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">项目图片 ({{ pagination.total }} 张)</h4>
+            <div>
+                <span class="me-2">每页显示:</span>
+                <select id="perPageSelect" class="form-select form-select-sm d-inline-block w-auto">
+                    <option value="10" {% if pagination.per_page==10 %}selected{% endif %}>10</option>
+                    <option value="25" {% if pagination.per_page==25 %}selected{% endif %}>25</option>
+                    <option value="50" {% if pagination.per_page==50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if pagination.per_page==100 %}selected{% endif %}>100</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 多选操作按钮 -->
+        <div class="action-buttons">
+            <button id="selectAllBtn" class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-check-square"></i> 全选
+            </button>
+            <button id="deselectAllBtn" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-square"></i> 取消全选
+            </button>
+            <button id="deleteSelectedBtn" class="btn btn-sm btn-danger" disabled>
+                <i class="fas fa-trash"></i> 删除选中图片
+            </button>
+            <button id="deleteUnannotatedBtn" class="btn btn-sm btn-warning">
+                <i class="fas fa-eraser"></i> 删除未标注图片
+            </button>
+        </div>
+
+        {% if images %}
+        <div class="row">
+            {% for image in images %}
+            <div class="col-md-4 col-sm-6 mb-4">
+                <div class="card image-card h-100" data-image-id="{{ image.id }}">
+                    <!-- 多选复选框 -->
+                    <div class="image-checkbox">
+                        <input type="checkbox" class="form-check-input image-select-checkbox"
+                            data-image-id="{{ image.id }}">
+                    </div>
+                    <div
+                        style="height: 200px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                        <img src="{{ url_for('static', filename=image.path) }}" class="card-img-top"
+                            style="object-fit: cover; height: 100%; width: 100%;" alt="{{ image.original_filename }}">
+                    </div>
+                    <div class="card-body d-flex flex-column">
+                        <h6 class="card-title text-truncate" title="{{ image.original_filename }}">{{
+                            image.original_filename }}</h6>
+                        <div class="mt-auto">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="text-muted">{{ image.width }} × {{ image.height }}</small>
+                                {% if image.annotations|length > 0 %}
+                                <span class="badge bg-success" title="已标注 {{ image.annotations|length }} 个对象">
+                                    <i class="fas fa-check-circle"></i> 已标注 ({{ image.annotations|length }})
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary" title="尚未标注">
+                                    <i class="fas fa-times-circle"></i> 未标注
+                                </span>
+                                {% endif %}
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <a href="{{ url_for('main.annotate_image', project_id=project.id, image_id=image.id) }}"
+                                    class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-object-group"></i> 标注
+                                </a>
+                                <div>
+                                    <small class="text-muted me-2">{{ image.created_at.strftime('%Y-%m-%d') if
+                                        image.created_at else '' }}</small>
+                                    <button type="button" class="btn btn-sm btn-outline-danger"
+                                        data-project-id="{{ project.id }}" data-image-id="{{ image.id }}"
+                                        data-filename="{{ image.original_filename }}"
+                                        onclick="confirmDeleteFromData(this)">
+                                        <i class="fas fa-trash"></i> 删除
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- 分页控件 -->
+        {% if pagination.pages > 1 %}
+        <nav aria-label="图片分页">
+            <ul class="pagination">
+                <!-- 上一页 -->
+                {% if pagination.has_prev %}
+                <li class="page-item">
+                    <a class="page-link"
+                        href="{{ url_for('main.project_images', project_id=project.id, page=pagination.prev_num, per_page=pagination.per_page) }}"
+                        aria-label="上一页">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">&laquo;</span>
+                </li>
+                {% endif %}
+
+                <!-- 页码 -->
+                {% for page_num in pagination.iter_pages() %}
+                {% if page_num %}
+                {% if page_num != pagination.page %}
+                <li class="page-item">
+                    <a class="page-link"
+                        href="{{ url_for('main.project_images', project_id=project.id, page=page_num, per_page=pagination.per_page) }}">{{
+                        page_num }}</a>
+                </li>
+                {% else %}
+                <li class="page-item active">
+                    <span class="page-link">{{ page_num }}</span>
+                </li>
+                {% endif %}
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">…</span>
+                </li>
+                {% endif %}
+                {% endfor %}
+
+                <!-- 下一页 -->
+                {% if pagination.has_next %}
+                <li class="page-item">
+                    <a class="page-link"
+                        href="{{ url_for('main.project_images', project_id=project.id, page=pagination.next_num, per_page=pagination.per_page) }}"
+                        aria-label="下一页">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">&raquo;</span>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-images fa-3x text-muted mb-3"></i>
+            <h4 class="text-muted">暂无图片</h4>
+            <p class="text-muted">请上传图片开始标注工作</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                项目统计
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span>总图片数:</span>
+                    <strong>{{ imgs_count }}</strong>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>已标注图片数:</span>
+                    <strong>
+                        {{ label_count.label_count }}
+                    </strong>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>未标注图片数:</span>
+                    <strong>
+                        {{ imgs_count-label_count.label_count }}
+                    </strong>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>总标注框数:</span>
+                    <strong>
+                        {{ annotation_count.annotation_count }}
+                    </strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                最近上传
+            </div>
+            <div class="card-body">
+                {% if images %}
+                <ul class="list-unstyled">
+                    {% for image in images %}
+                    <li class="mb-2">
+                        <div class="d-flex align-items-center">
+                            <div style="width: 40px; height: 40px; overflow: hidden; margin-right: 10px;">
+                                <img src="{{ url_for('static', filename=image.path) }}"
+                                    style="width: 100%; height: 100%; object-fit: cover;"
+                                    alt="{{ image.original_filename }}">
+                            </div>
+                            <div class="flex-grow-1 text-truncate">
+                                <small class="text-truncate d-block">{{ image.original_filename }}</small>
+                                <small class="text-muted">{{ image.created_at.strftime('%Y-%m-%d') if image.created_at
+                                    else '' }}</small>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted">暂无图片</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('images');
+        const fileInfo = document.getElementById('fileInfo');
+        const uploadForm = document.getElementById('uploadForm');
+        const perPageSelect = document.getElementById('perPageSelect');
+
+        // 防止默认拖拽行为
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        // 添加拖拽高亮效果
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        // 处理文件拖拽
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        function highlight() {
+            dropZone.classList.add('dragover');
+        }
+
+        function unhighlight() {
+            dropZone.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (files.length) {
+                fileInput.files = files;
+                updateFileInfo(files);
+            }
+        }
+
+        function updateFileInfo(files) {
+            if (files.length) {
+                let info = `已选择 ${files.length} 个文件: `;
+                for (let i = 0; i < files.length; i++) {
+                    info += `${files[i].name}${i < files.length - 1 ? ', ' : ''}`;
+                }
+                fileInfo.textContent = info;
+            } else {
+                fileInfo.textContent = '';
+            }
+        }
+
+        // 监听文件选择变化
+        fileInput.addEventListener('change', function () {
+            updateFileInfo(this.files);
+        });
+
+        // 监听每页显示数量变化
+        perPageSelect.addEventListener('change', function () {
+            const perPage = this.value;
+            const url = new URL(window.location);
+            url.searchParams.set('per_page', perPage);
+            url.searchParams.set('page', 1); // 重置到第一页
+            window.location.href = url.toString();
+        });
+
+        // 多选功能相关代码
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const deselectAllBtn = document.getElementById('deselectAllBtn');
+        const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+        const deleteUnannotatedBtn = document.getElementById('deleteUnannotatedBtn');
+        const checkboxes = document.querySelectorAll('.image-select-checkbox');
+
+        // 全选功能
+        selectAllBtn.addEventListener('click', function () {
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+                updateCardSelection(checkbox);
+            });
+            updateDeleteButtonState();
+        });
+
+        // 取消全选功能
+        deselectAllBtn.addEventListener('click', function () {
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+                updateCardSelection(checkbox);
+            });
+            updateDeleteButtonState();
+        });
+
+        // 删除选中图片功能
+        deleteSelectedBtn.addEventListener('click', function () {
+            const selectedImages = Array.from(checkboxes)
+                .filter(checkbox => checkbox.checked)
+                .map(checkbox => {
+                    const card = checkbox.closest('.image-card');
+                    const imageId = checkbox.dataset.imageId;
+                    const filename = card.querySelector('.card-title').textContent;
+                    return { id: imageId, filename: filename };
+                });
+
+            if (selectedImages.length === 0) {
+                layer.msg('请先选择要删除的图片');
+                return;
+            }
+
+            if (confirm(`确定要删除选中的 ${selectedImages.length} 张图片吗？此操作不可恢复！`)) {
+                // 发送删除请求
+                fetch(`/api/project/{{ project.id }}/images/delete_selected`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        image_ids: selectedImages.map(img => parseInt(img.id))
+                    })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            layer.msg(`成功删除 ${data.deleted_count} 张图片`);
+                            // 重新加载页面
+                            location.reload();
+                        } else {
+                            layer.msg('删除失败: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        layer.msg('删除过程中发生错误');
+                    });
+            }
+        });
+
+        // 删除未标注图片功能
+        deleteUnannotatedBtn.addEventListener('click', function () {
+            // 先统计未标注图片数量
+            const unannotatedCount = Array.from(checkboxes)
+                .filter(checkbox => {
+                    const card = checkbox.closest('.image-card');
+                    const badge = card.querySelector('.badge');
+                    return badge && badge.classList.contains('bg-secondary');
+                })
+                .length;
+
+            if (unannotatedCount === 0) {
+                layer.msg('没有未标注的图片');
+                return;
+            }
+
+            if (confirm(`确定要删除 ${unannotatedCount} 张未标注的图片吗？此操作不可恢复！`)) {
+                // 发送删除请求
+                fetch(`/api/project/{{ project.id }}/images/delete_unannotated`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            layer.msg(`成功删除 ${data.deleted_count} 张未标注图片`);
+                            // 重新加载页面
+                            location.reload();
+                        } else {
+                            layer.msg('删除失败: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        layer.msg('删除过程中发生错误');
+                    });
+            }
+        });
+
+        // 单个复选框变化事件
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function () {
+                updateCardSelection(this);
+                updateDeleteButtonState();
+            });
+        });
+
+        // 更新卡片选中状态
+        function updateCardSelection(checkbox) {
+            const card = checkbox.closest('.image-card');
+            if (checkbox.checked) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        }
+
+        // 更新删除按钮状态
+        function updateDeleteButtonState() {
+            const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+            deleteSelectedBtn.disabled = selectedCount === 0;
+        }
+    });
+
+    function confirmDelete(projectId, imageId, filename) {
+        if (confirm(`确定要删除图片 "${filename}" 吗？此操作不可恢复！`)) {
+            // 创建表单并提交删除请求
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/project/${projectId}/image/${imageId}/delete`;
+
+            // 添加CSRF令牌（如果需要）
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = '_method';
+            input.value = 'POST';
+            form.appendChild(input);
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+
+    function confirmDeleteFromData(button) {
+        const projectId = button.getAttribute('data-project-id');
+        const imageId = button.getAttribute('data-image-id');
+        const filename = button.getAttribute('data-filename');
+        confirmDelete(projectId, imageId, filename);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,265 @@
+<!-- Bootstrap CSS -->
+<script src="/static/js/jquery-2.1.4.min.js"></script>
+<link href="/static/css/bootstrap.min.css" rel="stylesheet">
+<script src="/static/js/layer/layer.js"></script>
+<!-- Font Awesome -->
+<link rel="stylesheet" href="/static/css/all.min.css">
+{% block extra_css %}
+<style>
+    .image-card {
+        transition: transform 0.2s;
+    }
+
+    .image-card:hover {
+        transform: scale(1.02);
+    }
+
+    .image-placeholder {
+        background-color: #f8f9fa;
+        border: 2px dashed #dee2e6;
+        border-radius: 0.375rem;
+        text-align: center;
+        padding: 2rem;
+        margin-bottom: 1rem;
+    }
+
+    .drop-zone {
+        border: 2px dashed #007bff;
+        background-color: #f8f9fa;
+        border-radius: 0.375rem;
+        padding: 2rem;
+        text-align: center;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .drop-zone.dragover {
+        background-color: #e9ecef;
+        border-color: #0056b3;
+    }
+
+    .file-info {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+
+    /* 分页样式 */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        padding: 20px 0;
+    }
+
+    .pagination .page-item {
+        margin: 0 2px;
+    }
+
+    .pagination .page-link {
+        color: #007bff;
+        padding: 0.5rem 0.75rem;
+        text-decoration: none;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+    }
+
+    .pagination .page-item.active .page-link {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: white;
+    }
+
+    .pagination .page-item.disabled .page-link {
+        color: #6c757d;
+        pointer-events: none;
+        background-color: #fff;
+        border-color: #dee2e6;
+    }
+
+    /* 多选相关样式 */
+    .image-checkbox {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+    }
+
+    .image-card.selected {
+        border: 2px solid #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, .25);
+    }
+
+    .action-buttons {
+        margin-bottom: 1rem;
+    }
+
+    .action-buttons .btn {
+        margin-right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">项目图片 ({{ pagination.total }} 张)</h4>
+        <div>
+            <span class="me-2">每页显示:</span>
+            <select id="perPageSelect" class="form-select form-select-sm d-inline-block w-auto">
+                <option value="10" {% if pagination.per_page==10 %}selected{% endif %}>10</option>
+                <option value="25" {% if pagination.per_page==25 %}selected{% endif %}>25</option>
+                <option value="50" {% if pagination.per_page==50 %}selected{% endif %}>50</option>
+                <option value="100" {% if pagination.per_page==100 %}selected{% endif %}>100</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- 多选操作按钮 -->
+    <div class="action-buttons">
+        <button id="selectAllBtn" class="btn btn-sm btn-outline-primary">
+            <i class="fas fa-check-square"></i> 全选
+        </button>
+        <button id="deselectAllBtn" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-square"></i> 取消全选
+        </button>
+    </div>
+
+    {% if images %}
+    <div class="row">
+        {% for image in images %}
+        <div class="col-md-4 col-sm-6 mb-4">
+            <div class="card image-card h-100" data-image-id="{{ image.id }}">
+                <!-- 多选复选框 -->
+                <div class="image-checkbox">
+                    <input type="checkbox" class="form-check-input image-select-checkbox" data-image-id="{{ image.id }}"
+                        data-image-info="{
+                            &quot;id&quot;: {{ image.id }}, 
+                            &quot;path&quot;: &quot;{{ image.path }}&quot;, 
+                            &quot;original_filename&quot;: &quot;{{ image.original_filename|e }}&quot;, 
+                            &quot;width&quot;: {{ image.width }}, 
+                            &quot;height&quot;: {{ image.height }}
+                        }">
+                </div>
+                <div
+                    style="height: 200px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                    <img src="{{ url_for('static', filename=image.path) }}" class="card-img-top"
+                        style="object-fit: cover; height: 100%; width: 100%;" alt="{{ image.original_filename }}">
+                </div>
+                <div class="card-body d-flex flex-column">
+                    <h6 class="card-title text-truncate" title="{{ image.original_filename }}">{{
+                        image.original_filename }}</h6>
+                    <div class="mt-auto">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted">{{ image.width }} × {{ image.height }}</small>
+                            {% if image.annotations|length > 0 %}
+                            <span class="badge bg-success" title="已标注 {{ image.annotations|length }} 个对象">
+                                <i class="fas fa-check-circle"></i> 已标注 ({{ image.annotations|length }})
+                            </span>
+                            {% else %}
+                            <span class="badge bg-secondary" title="尚未标注">
+                                <i class="fas fa-times-circle"></i> 未标注
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {# 关键：补充 {% endif %} 闭合 {% if images %} 块 #}
+    {% else %}
+    {# 可选：添加无图片时的兜底提示，提升用户体验 #}
+    <div class="alert alert-info text-center py-5" role="alert">
+        <i class="fas fa-image fa-2x mb-3"></i>
+        <p>暂无图片数据</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('images');
+        const fileInfo = document.getElementById('fileInfo');
+        const uploadForm = document.getElementById('uploadForm');
+        const perPageSelect = document.getElementById('perPageSelect');
+
+
+        // 监听每页显示数量变化
+        perPageSelect.addEventListener('change', function () {
+            const perPage = this.value;
+            const url = new URL(window.location);
+            url.searchParams.set('per_page', perPage);
+            url.searchParams.set('page', 1); // 重置到第一页
+            window.location.href = url.toString();
+        });
+
+        // 多选功能相关代码
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const deselectAllBtn = document.getElementById('deselectAllBtn');
+        const checkboxes = document.querySelectorAll('.image-select-checkbox');
+
+        // 全选功能
+        selectAllBtn.addEventListener('click', function () {
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+                updateCardSelection(checkbox);
+            });
+        });
+
+        // 取消全选功能
+        deselectAllBtn.addEventListener('click', function () {
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+                updateCardSelection(checkbox);
+            });
+        });
+
+        // 单个复选框变化事件
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function () {
+                updateCardSelection(this);
+            });
+        });
+
+        // 更新卡片选中状态
+        function updateCardSelection(checkbox) {
+            const card = checkbox.closest('.image-card');
+            if (checkbox.checked) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+        }
+    });
+
+
+    function getSelectedImages() {
+        const selectedCheckboxes = document.querySelectorAll('.image-select-checkbox:checked');
+        const selectedImages = Array.from(selectedCheckboxes).map(cb => {
+            const imageInfo = JSON.parse(cb.dataset.imageInfo);
+            imageInfo.image_id = parseInt(imageInfo.id);
+            imageInfo.id = undefined;  // 移除冗余的 id 字段
+            return imageInfo;
+        });
+
+        return selectedImages;
+    }
+
+    // 3. 监听父页面的请求消息，被动返回数据
+    window.addEventListener('message', function (event) {
+
+        // 响应父页面的数据请求
+        if (event.data.type === 'requestSelectedData') {
+            const images = getSelectedImages();
+            window.parent.postMessage(
+                { type: 'iframeSelectedImageData', data: images },
+                event.origin // 直接返回发送方域名，更安全
+            );
+        }
+    });
+
+</script>
+{% endblock %}

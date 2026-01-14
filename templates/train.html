@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}模型训练 - {{ project.name }} - AI模型训练平台{% endblock %}
+
+{% block content %}
+
+<div class="container" style="max-width: 100%;">
+    <div class="row">
+        {% set current_nav_key = 'train'%}
+        {% include "project_nav.html"%}
+        <div class="col-10">
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            训练状态
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <strong>状态:</strong>
+                                    <span id="trainStatus">{{ status.message or '等待开始' }}</span>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="progress">
+                                    <div id="trainProgress" class="progress-bar" role="progressbar"
+                                        style="width: {{ status.progress or 0 }}%"
+                                        aria-valuenow="{{ status.progress or 0 }}" aria-valuemin="0"
+                                        aria-valuemax="100">
+                                        {{ status.progress or 0 }}%
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <button id="startTrain" class="btn btn-primary">
+                                    <i class="fas fa-play"></i> 开始训练
+                                </button>
+                                <button id="stopTrain" class="btn btn-danger" disabled>
+                                    <i class="fas fa-stop"></i> 停止训练
+                                </button>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label"><strong>训练日志:</strong></label>
+                                <pre id="trainLog" class="bg-dark text-light p-3"
+                                    style="height: 300px; overflow-y: auto; border-radius: 5px;">{{ status.log or '暂无日志' }}</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header">
+                            训练配置
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">模型架构</label>
+                                <select class="form-select" id="modelArch">
+                                    <option value="yolov8n.pt">YOLOv8n (轻量级)</option>
+                                    <option value="yolov8s.pt">YOLOv8s (小型)</option>
+                                    <option value="yolov8m.pt">YOLOv8m (中型)</option>
+                                    <option value="yolov8l.pt">YOLOv8l (大型)</option>
+                                    <option value="yolov8x.pt">YOLOv8x (超大型)</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">训练轮数 (Epochs)</label>
+                                <input type="number" class="form-control" id="epochs" value="10" min="1" max="1000">
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">图片尺寸</label>
+                                <select class="form-select" id="imgSize">
+                                    <option value="320">320 × 320</option>
+                                    <option value="416">416 × 416</option>
+                                    <option value="512">512 × 512</option>
+                                    <option value="640" selected>640 × 640</option>
+                                    <option value="800">800 × 800</option>
+                                    <option value="1024">1024 × 1024</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">批量大小 (Batch Size)</label>
+                                <input type="number" class="form-control" id="batchSize" value="16" min="1" max="128">
+                            </div>
+
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="useGPU" checked>
+                                <label class="form-check-label" for="useGPU">
+                                    使用GPU训练 (如果可用)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            训练数据统计
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-2">
+                                <strong>训练集图片数:</strong>
+                                <span class="float-end">{{ project.images | selectattr('dataset_type', 'equalto',
+                                    'train') | list |
+                                    length }}</span>
+                            </div>
+                            <div class="mb-2">
+                                <strong>验证集图片数:</strong>
+                                <span class="float-end">{{ project.images | selectattr('dataset_type', 'equalto', 'val')
+                                    | list |
+                                    length }}</span>
+                            </div>
+                            <div class="mb-2">
+                                <strong>标签类别数:</strong>
+                                <span class="float-end">{{ project.labels | length }}</span>
+                            </div>
+                            <div class="mb-2">
+                                <strong>总标注框数:</strong>
+                                <span class="float-end">
+                                    {% set total_annotations = namespace(value=0) %}
+                                    {% for image in project.images %}
+                                    {% set total_annotations.value = total_annotations.value + image.annotations |
+                                    length %}
+                                    {% endfor %}
+                                    {{ total_annotations.value }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const projectId = '{{ project.id }}';
+        let trainInterval = null;
+
+        // 开始训练
+        document.getElementById('startTrain').addEventListener('click', function () {
+            // 获取用户配置的参数
+            const epochs = parseInt(document.getElementById('epochs').value);
+            const modelArch = document.getElementById('modelArch').value;
+            const imgSize = parseInt(document.getElementById('imgSize').value);
+            const batchSize = parseInt(document.getElementById('batchSize').value);
+            const useGPU = document.getElementById('useGPU').checked;
+
+            // 发送训练参数到后端
+            fetch(`/api/project/${projectId}/train`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    epochs: epochs,
+                    model_arch: modelArch,
+                    img_size: imgSize,
+                    batch_size: batchSize,
+                    use_gpu: useGPU
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 启动状态轮询
+                        startTrainStatusPolling();
+                        document.getElementById('startTrain').disabled = true;
+                        document.getElementById('stopTrain').disabled = false;
+                    } else {
+                        layer.msg(data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error starting training:', error);
+                    layer.msg('启动训练时发生错误');
+                });
+        });
+
+        // 停止训练
+        document.getElementById('stopTrain').addEventListener('click', function () {
+            fetch(`/api/project/${projectId}/train/stop`, {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 训练停止请求已发送，更新UI
+                        document.getElementById('trainStatus').textContent = '正在停止训练...';
+                    } else {
+                        layer.msg(data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error stopping training:', error);
+                    layer.msg('停止训练时发生错误');
+                });
+        });
+
+        // 开始轮询训练状态
+        function startTrainStatusPolling() {
+            if (trainInterval) {
+                clearInterval(trainInterval);
+            }
+
+            trainInterval = setInterval(function () {
+                fetch(`/api/project/${projectId}/train/status`)
+                    .then(response => response.json())
+                    .then(data => {
+                        updateTrainStatus(data);
+                    });
+            }, 1000);
+        }
+
+        // 更新训练状态显示
+        function updateTrainStatus(status) {
+            document.getElementById('trainStatus').textContent = status.message;
+            document.getElementById('trainProgress').style.width = status.progress + '%';
+            document.getElementById('trainProgress').textContent = status.progress + '%';
+            document.getElementById('trainProgress').setAttribute('aria-valuenow', status.progress);
+
+            // 更新训练日志
+            if (status.log) {
+                const logElement = document.getElementById('trainLog');
+                logElement.textContent = status.log;
+                // 滚动到底部
+                logElement.scrollTop = logElement.scrollHeight;
+            }
+
+            // 如果训练完成或出错，停止轮询
+            if (status.status === 'completed' || status.status === 'error' || status.status === 'stopped') {
+                clearInterval(trainInterval);
+                document.getElementById('startTrain').disabled = false;
+                document.getElementById('stopTrain').disabled = true;
+            }
+        }
+
+        // 页面加载时检查训练状态
+        fetch(`/api/project/${projectId}/train/status`)
+            .then(response => response.json())
+            .then(data => {
+                updateTrainStatus(data);
+                // 如果正在训练中，开始轮询
+                if (data.status === 'preparing' || data.status === 'training') {
+                    startTrainStatusPolling();
+                    document.getElementById('startTrain').disabled = true;
+                    document.getElementById('stopTrain').disabled = false;
+                }
+            });
+    });
+</script>
+{% endblock %}

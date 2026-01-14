@@ -1,0 +1,601 @@
+{% extends "base.html" %}
+
+{% block title %}RTSP实时流推理 - {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-video me-2"></i>RTSP实时流推理</h2>
+                    <p class="text-muted mb-0">项目: {{ project.name }}</p>
+                </div>
+                <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>返回项目
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-cog me-1"></i>推理配置
+                </div>
+                <div class="card-body">
+                    <form id="rtspStreamForm">
+                        <!-- 模型选择 -->
+                        <div class="mb-3">
+                            <label class="form-label">选择模型类型</label>
+                            <div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="modelType" id="systemModel" value="system" checked>
+                                    <label class="form-check-label" for="systemModel">
+                                        系统预置模型
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="modelType" id="existingModel" value="existing">
+                                    <label class="form-check-label" for="existingModel">
+                                        已训练模型
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="modelType" id="uploadedModel" value="uploaded">
+                                    <label class="form-check-label" for="uploadedModel">
+                                        用户上传模型
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 系统模型选择 -->
+                        <div id="systemModelOptions" class="mb-3">
+                            <label for="systemModelSelect" class="form-label">选择系统模型</label>
+                            <select class="form-select" id="systemModelSelect">
+                                {% if best_model_exists %}
+                                <option value="best" selected>最佳模型 (best.pt)</option>
+                                {% endif %}
+                                {% if last_model_exists %}
+                                <option value="last"{% if not best_model_exists %} selected{% endif %}>最新模型 (last.pt)</option>
+                                {% endif %}
+                                <option value="yolov8n"{% if not best_model_exists and not last_model_exists %} selected{% endif %}>YOLOv8n</option>
+                                <option value="yolov8s">YOLOv8s</option>
+                                <option value="yolov8m">YOLOv8m</option>
+                                <option value="yolov8l">YOLOv8l</option>
+                                <option value="yolov8x">YOLOv8x</option>
+                            </select>
+                        </div>
+
+                        <!-- 已训练模型选择 -->
+                        <div id="existingModelOptions" class="mb-3" style="display: none;">
+                            <label for="existingModelSelect" class="form-label">选择已训练模型</label>
+                            <select class="form-select" id="existingModelSelect">
+                                {% for model in existing_models %}
+                                <option value="{{ model }}">{{ model }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- 用户上传模型选择 -->
+                        <div id="uploadedModelOptions" class="mb-3" style="display: none;">
+                            <div class="mb-3">
+                                <label for="modelFileUpload" class="form-label">上传模型文件</label>
+                                <input class="form-control" type="file" id="modelFileUpload" accept=".pt,.pth,.onnx">
+                                <div class="form-text">支持 .pt, .pth, .onnx 格式的模型文件</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="uploadedModelSelect" class="form-label">或选择已上传的模型</label>
+                                <select class="form-select" id="uploadedModelSelect">
+                                    <option value="">请选择已上传的模型</option>
+                                    <!-- 这里将通过JavaScript动态加载已上传的模型 -->
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- RTSP地址输入 -->
+                        <div class="mb-3">
+                            <label for="rtspUrl" class="form-label">RTSP流地址</label>
+                            <input class="form-control" type="text" id="rtspUrl" placeholder="rtsp://username:password@ip:port/path" required>
+                            <div class="form-text">请输入完整的RTSP流地址</div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-success" id="startStream">
+                                <i class="fas fa-play me-1"></i>开始实时推理
+                            </button>
+                            <button type="button" class="btn btn-danger" id="stopStream" style="display: none;">
+                                <i class="fas fa-stop me-1"></i>停止推理
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 推理统计 -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <i class="fas fa-chart-bar me-1"></i>实时统计
+                </div>
+                <div class="card-body">
+                    <div id="streamStats">
+                        <p class="mb-1"><strong>状态:</strong> <span id="streamStatus" class="text-muted">未开始</span></p>
+                        <p class="mb-1"><strong>运行时间:</strong> <span id="streamDuration">00:00:00</span></p>
+                        <p class="mb-0"><strong>RTSP地址:</strong> <span id="currentRtspUrl" class="text-muted">-</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-eye me-1"></i>实时推理结果
+                </div>
+                <div class="card-body p-0">
+                    <div id="videoContainer" class="text-center" style="min-height: 400px; background-color: #f8f9fa;">
+                        <div id="waitingMessage" class="d-flex align-items-center justify-content-center" style="height: 400px;">
+                            <div>
+                                <i class="fas fa-video fa-3x text-muted mb-3"></i>
+                                <h4 class="text-muted">等待开始推理</h4>
+                                <p class="text-muted">配置参数后点击"开始实时推理"</p>
+                            </div>
+                        </div>
+                        <img id="videoStream" style="display: none; max-width: 100%; height: auto;" alt="RTSP实时流">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 从URL参数获取配置信息
+    const urlParams = new URLSearchParams(window.location.search);
+    const rtspUrl = urlParams.get('rtsp_url');
+    const modelType = urlParams.get('model_type');
+    const systemModel = urlParams.get('system_model');
+    const existingModel = urlParams.get('existing_model');
+    
+    // 自动填充表单
+    if (rtspUrl) {
+        document.getElementById('rtspUrl').value = decodeURIComponent(rtspUrl);
+    }
+    
+    // 获取DOM元素
+    const systemModelRadio = document.getElementById('systemModel');
+    const existingModelRadio = document.getElementById('existingModel');
+    const uploadedModelRadio = document.getElementById('uploadedModel');
+    const systemModelOptions = document.getElementById('systemModelOptions');
+    const existingModelOptions = document.getElementById('existingModelOptions');
+    const uploadedModelOptions = document.getElementById('uploadedModelOptions');
+    const startStreamBtn = document.getElementById('startStream');
+    const stopStreamBtn = document.getElementById('stopStream');
+    const videoStream = document.getElementById('videoStream');
+    const waitingMessage = document.getElementById('waitingMessage');
+    const streamStatus = document.getElementById('streamStatus');
+    const streamDuration = document.getElementById('streamDuration');
+    const currentRtspUrl = document.getElementById('currentRtspUrl');
+    const rtspUrlInput = document.getElementById('rtspUrl');
+    
+    let streamStartTime = null;
+    let durationInterval = null;
+    let checkStreamTimer = null;
+    let fallbackTimer = null;
+
+    // 模型类型切换
+    function toggleModelOptions() {
+        if (systemModelRadio.checked) {
+            systemModelOptions.style.display = 'block';
+            existingModelOptions.style.display = 'none';
+            uploadedModelOptions.style.display = 'none';
+        } else if (existingModelRadio.checked) {
+            systemModelOptions.style.display = 'none';
+            existingModelOptions.style.display = 'block';
+            uploadedModelOptions.style.display = 'none';
+        } else if (uploadedModelRadio.checked) {
+            systemModelOptions.style.display = 'none';
+            existingModelOptions.style.display = 'none';
+            uploadedModelOptions.style.display = 'block';
+            loadUploadedModels();
+        }
+    }
+    
+    // 从URL参数设置表单值
+    if (modelType) {
+        const modelTypeRadio = document.getElementById(modelType + 'Model');
+        if (modelTypeRadio) {
+            modelTypeRadio.checked = true;
+            toggleModelOptions();
+        }
+    }
+    
+    if (systemModel && modelType === 'system') {
+        const systemModelSelect = document.getElementById('systemModelSelect');
+        if (systemModelSelect) {
+            let modelValue = decodeURIComponent(systemModel);
+            // 处理模型名称映射
+            if (modelValue === 'best.pt') {
+                modelValue = 'best';
+            } else if (modelValue === 'last.pt') {
+                modelValue = 'last';
+            }
+            systemModelSelect.value = modelValue;
+        }
+    }
+    
+    if (existingModel && modelType === 'existing') {
+        const existingModelSelect = document.getElementById('existingModelSelect');
+        if (existingModelSelect) {
+            existingModelSelect.value = decodeURIComponent(existingModel);
+        }
+    }
+
+    systemModelRadio.addEventListener('change', toggleModelOptions);
+    existingModelRadio.addEventListener('change', toggleModelOptions);
+    uploadedModelRadio.addEventListener('change', toggleModelOptions);
+
+    // 开始推理
+    startStreamBtn.addEventListener('click', function() {
+        const rtspUrl = rtspUrlInput.value.trim();
+        if (!rtspUrl) {
+            layer.msg('请输入RTSP流地址');
+            return;
+        }
+
+        // 获取模型参数
+        const modelType = document.querySelector('input[name="modelType"]:checked').value;
+        let modelParam = '';
+        
+        if (modelType === 'system') {
+            modelParam = document.getElementById('systemModelSelect').value;
+        } else if (modelType === 'existing') {
+            modelParam = document.getElementById('existingModelSelect').value;
+        } else if (modelType === 'uploaded') {
+            const uploadedModelSelect = document.getElementById('uploadedModelSelect');
+            const fileInput = document.getElementById('modelFileUpload');
+            
+            if (fileInput.files.length > 0) {
+                // 如果有文件上传，先上传文件
+                uploadModelFile(fileInput.files[0], function(uploadedFileName) {
+                    if (uploadedFileName) {
+                        modelParam = uploadedFileName;
+                        startInference(rtspUrl, modelType, modelParam);
+                    }
+                });
+                return;
+            } else if (uploadedModelSelect.value) {
+                modelParam = uploadedModelSelect.value;
+            } else {
+                layer.msg('请选择一个已上传的模型或上传新的模型文件');
+                return;
+            }
+        }
+
+        startInference(rtspUrl, modelType, modelParam);
+    });
+    
+    // 启动推理的函数
+    function startInference(rtspUrl, modelType, modelParam) {
+        // 构建视频流URL
+        let paramName;
+        if (modelType === 'system') {
+            paramName = 'system_model';
+        } else if (modelType === 'existing') {
+            paramName = 'existing_model';
+        } else if (modelType === 'uploaded') {
+            paramName = 'uploaded_model';
+        }
+        
+        const streamUrl = `{{ url_for('main.rtsp_video_feed', project_id=project.id) }}?rtsp_url=${encodeURIComponent(rtspUrl)}&model_type=${modelType}&${paramName}=${encodeURIComponent(modelParam)}`;
+        
+        // 设置加载状态
+        waitingMessage.innerHTML = `
+            <div>
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <h4 class="text-primary">正在连接...</h4>
+                <p class="text-muted">正在建立RTSP连接并加载模型</p>
+            </div>
+        `;
+        waitingMessage.style.display = 'flex';
+        videoStream.style.display = 'none';
+        
+        // 显示视频流
+        videoStream.src = streamUrl;
+        
+        // 添加图片加载事件监听器
+        videoStream.onload = function() {
+            // 图片加载成功后隐藏等待消息
+            waitingMessage.style.display = 'none';
+            videoStream.style.display = 'block';
+        };
+        
+        videoStream.onerror = function() {
+            // 图片加载失败时显示错误信息
+            waitingMessage.innerHTML = `
+                <div>
+                    <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                    <h4 class="text-danger">连接失败</h4>
+                    <p class="text-muted">无法连接到RTSP流，请检查地址和网络连接</p>
+                </div>
+            `;
+            waitingMessage.style.display = 'flex';
+            videoStream.style.display = 'none';
+        };
+        
+        // 清除之前的定时器
+        if (checkStreamTimer) {
+            clearTimeout(checkStreamTimer);
+        }
+        if (fallbackTimer) {
+            clearTimeout(fallbackTimer);
+        }
+        
+        // 添加定时器检查视频流是否开始显示（针对MJPEG流）
+        checkStreamTimer = setTimeout(function() {
+            // 2秒后直接隐藏等待消息并显示视频流
+            if (videoStream.src) {
+                waitingMessage.style.display = 'none';
+                videoStream.style.display = 'block';
+            }
+        }, 2000);
+        
+        // 添加另一个定时器作为备用检查
+        fallbackTimer = setTimeout(function() {
+            // 4秒后强制隐藏等待消息（如果视频流已设置）
+            if (videoStream.src) {
+                waitingMessage.style.display = 'none';
+                videoStream.style.display = 'block';
+            }
+        }, 4000);
+        
+        // 更新UI状态
+        startStreamBtn.style.display = 'none';
+        stopStreamBtn.style.display = 'block';
+        streamStatus.textContent = '推理中';
+        streamStatus.className = 'text-success';
+        currentRtspUrl.textContent = rtspUrl;
+        
+        // 开始计时
+        streamStartTime = new Date();
+        durationInterval = setInterval(updateDuration, 1000);
+        
+        // 禁用表单
+        document.getElementById('rtspStreamForm').querySelectorAll('input, select').forEach(el => {
+            el.disabled = true;
+        });
+    }
+    
+    // 上传模型文件
+    function uploadModelFile(file, callback) {
+        const formData = new FormData();
+        formData.append('model_file', file);
+        
+        fetch(`{{ url_for('main.upload_model', project_id=project.id) }}`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                layer.msg('模型上传成功！');
+                loadUploadedModels(); // 重新加载模型列表
+                callback(data.filename);
+            } else {
+                layer.msg('模型上传失败: ' + data.error);
+                callback(null);
+            }
+        })
+        .catch(error => {
+            console.error('上传错误:', error);
+            layer.msg('模型上传失败: ' + error.message);
+            callback(null);
+        });
+    }
+    
+    // 加载已上传的模型列表
+    function loadUploadedModels() {
+        fetch(`{{ url_for('main.get_uploaded_models', project_id=project.id) }}`)
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('uploadedModelSelect');
+            // 清空现有选项（保留第一个默认选项）
+            select.innerHTML = '<option value="">请选择已上传的模型</option>';
+            
+            if (data.models && data.models.length > 0) {
+                data.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    select.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('加载模型列表失败:', error);
+        });
+    }
+
+    // 停止推理
+    stopStreamBtn.addEventListener('click', function() {
+        console.log('停止RTSP流推理');
+        
+        // 获取当前配置参数
+        const rtspUrl = rtspUrlInput.value.trim();
+        const modelType = document.querySelector('input[name="modelType"]:checked').value;
+        let systemModel = null;
+        let existingModel = null;
+        let uploadedModel = null;
+        
+        if (modelType === 'system') {
+            systemModel = document.getElementById('systemModelSelect').value;
+        } else if (modelType === 'existing') {
+            existingModel = document.getElementById('existingModelSelect').value;
+        } else if (modelType === 'uploaded') {
+            uploadedModel = document.getElementById('uploadedModelSelect').value;
+        }
+        
+        // 调用停止API
+        fetch(`/api/project/{{ project.id }}/rtsp_stream/stop`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                rtsp_url: rtspUrl,
+                model_type: modelType,
+                system_model: systemModel,
+                existing_model: existingModel,
+                uploaded_model: uploadedModel
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('停止API响应:', data);
+        })
+        .catch(error => {
+            console.error('停止API错误:', error);
+        });
+        
+        // 停止视频流
+        videoStream.src = '';
+        videoStream.style.display = 'none';
+        
+        // 重置等待消息为初始状态
+        waitingMessage.innerHTML = `
+            <div>
+                <i class="fas fa-video fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">等待开始推理</h4>
+                <p class="text-muted">配置参数后点击"开始实时推理"</p>
+            </div>
+        `;
+        waitingMessage.style.display = 'flex';
+        
+        // 更新UI状态
+        startStreamBtn.style.display = 'block';
+        stopStreamBtn.style.display = 'none';
+        streamStatus.textContent = '已停止';
+        streamStatus.className = 'text-muted';
+        
+        // 停止计时
+        if (durationInterval) {
+            clearInterval(durationInterval);
+            durationInterval = null;
+        }
+        
+        // 清除等待消息定时器
+        if (checkStreamTimer) {
+            clearTimeout(checkStreamTimer);
+            checkStreamTimer = null;
+        }
+        if (fallbackTimer) {
+            clearTimeout(fallbackTimer);
+            fallbackTimer = null;
+        }
+        
+        // 启用表单
+        document.getElementById('rtspStreamForm').querySelectorAll('input, select').forEach(el => {
+            el.disabled = false;
+        });
+    });
+
+    // 更新运行时间
+    function updateDuration() {
+        if (streamStartTime) {
+            const now = new Date();
+            const diff = Math.floor((now - streamStartTime) / 1000);
+            const hours = Math.floor(diff / 3600).toString().padStart(2, '0');
+            const minutes = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+            const seconds = (diff % 60).toString().padStart(2, '0');
+            streamDuration.textContent = `${hours}:${minutes}:${seconds}`;
+        }
+    }
+
+    // 处理视频加载错误
+    videoStream.addEventListener('error', function(e) {
+        console.error('视频流错误:', e);
+        
+        // 更新状态显示
+        streamStatus.textContent = '连接失败';
+        streamStatus.className = 'text-danger';
+        
+        // 显示错误信息
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'alert alert-danger mt-3';
+        errorDiv.innerHTML = `
+            <h6>视频流连接失败</h6>
+            <p>可能的原因：</p>
+            <ul>
+                <li>RTSP地址不正确</li>
+                <li>网络连接问题</li>
+                <li>摄像头离线或无法访问</li>
+                <li>用户名密码错误</li>
+            </ul>
+            <p>请检查以上问题后重试。</p>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="this.parentElement.remove(); startStreamBtn.click();">重新连接</button>
+        `;
+        
+        // 移除之前的错误信息
+        const existingError = document.querySelector('.alert-danger');
+        if (existingError) {
+            existingError.remove();
+        }
+        
+        // 在视频容器后添加错误信息
+        document.querySelector('.video-container').after(errorDiv);
+        
+        // 自动停止
+        setTimeout(() => {
+            stopStreamBtn.click();
+        }, 1000);
+    });
+    
+    // 处理视频加载成功
+    videoStream.addEventListener('loadstart', function() {
+        console.log('开始加载视频流');
+        streamStatus.textContent = '连接中...';
+        streamStatus.className = 'text-warning';
+    });
+    
+    videoStream.addEventListener('loadeddata', function() {
+        console.log('视频流数据加载完成');
+        streamStatus.textContent = '推理中';
+        streamStatus.className = 'text-success';
+        
+        // 隐藏等待消息并显示视频流
+        waitingMessage.style.display = 'none';
+        videoStream.style.display = 'block';
+        
+        // 移除错误信息
+        const errorDiv = document.querySelector('.alert-danger');
+        if (errorDiv) {
+            errorDiv.remove();
+        }
+    });
+    
+    // 监听视频流中断
+    videoStream.addEventListener('stalled', function() {
+        console.warn('视频流暂停');
+        streamStatus.textContent = '流中断';
+        streamStatus.className = 'text-warning';
+    });
+    
+    videoStream.addEventListener('waiting', function() {
+        console.warn('视频流等待数据');
+        streamStatus.textContent = '缓冲中...';
+        streamStatus.className = 'text-warning';
+    });
+    
+    videoStream.addEventListener('playing', function() {
+        console.log('视频流正在播放');
+        streamStatus.textContent = '推理中';
+        streamStatus.className = 'text-success';
+    });
+});
+</script>
+{% endblock %}

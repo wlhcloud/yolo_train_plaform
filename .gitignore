@@ -1,0 +1,17 @@
+﻿.venv/
+.svn/
+.lingma/
+.git/
+YOLOv8Web.zip
+static/inference_material
+static/inference_results
+static/uploads
+static/models
+static/datasets
+projects
+your_database.db
+runs
+instance
+db
+__pycache__
+

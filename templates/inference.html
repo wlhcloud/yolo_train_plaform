@@ -1,0 +1,624 @@
+{% extends "base.html" %}
+
+{% block title %}模型推理 - {{ project.name }} - AI模型训练平台{% endblock %}
+
+{% block extra_css %}
+<style>
+    .result-image-container {
+        position: relative;
+        display: inline-block;
+        max-width: 100%;
+    }
+
+    .result-image {
+        max-width: 100%;
+        height: auto;
+    }
+
+    .detection-box {
+        position: absolute;
+        border: 2px solid #ff0000;
+    }
+
+    .detection-label {
+        position: absolute;
+        background-color: #ff0000;
+        color: white;
+        font-size: 12px;
+        padding: 2px 4px;
+        white-space: nowrap;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 100%;">
+    <div class="row">
+        {% set current_nav_key = 'inference'%}
+        {% include "project_nav.html"%}
+        <div class="col-10">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <i class="fas fa-cog me-1"></i>模型选择
+                        </div>
+                        <div class="card-body">
+                            <form id="modelSelectionForm">
+                                <div class="mb-3">
+                                    <label class="form-label">选择模型</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="modelType" id="systemModel"
+                                            value="system" checked>
+                                        <label class="form-check-label" for="systemModel">
+                                            使用系统训练模型
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="modelType" id="uploadModel"
+                                            value="upload">
+                                        <label class="form-check-label" for="uploadModel">
+                                            上传模型文件
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="modelType" id="uploadedModel"
+                                            value="uploaded">
+                                        <label class="form-check-label" for="uploadedModel">
+                                            已上传模型
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="modelType" id="existingModel"
+                                            value="existing">
+                                        <label class="form-check-label" for="existingModel">
+                                            已存在模型
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div id="systemModelOptions">
+                                    <div class="mb-3">
+                                        <label for="systemModelSelect" class="form-label">系统模型</label>
+                                        <select class="form-select" id="systemModelSelect">
+                                            <option value="">选择系统训练的模型</option>
+                                            {% if best_model_exists %}
+                                            <option value="best.pt">best.pt (项目训练的最佳模型)</option>
+                                            {% endif %}
+                                            {% if last_model_exists %}
+                                            <option value="last.pt">last.pt (项目最后训练的模型)</option>
+                                            {% endif %}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div id="uploadModelOptions" style="display: none;">
+                                    <div class="mb-3">
+                                        <label for="modelFile" class="form-label">上传模型文件</label>
+                                        <input class="form-control" type="file" id="modelFile" accept=".pt">
+                                        <div class="form-text">支持YOLOv8格式的.pt模型文件</div>
+                                    </div>
+                                </div>
+
+                                <div id="uploadedModelOptions" style="display: none;">
+                                    <div class="mb-3">
+                                        <label for="uploadedModelSelect" class="form-label">已上传模型</label>
+                                        <select class="form-select" id="uploadedModelSelect">
+                                            <option value="">选择已上传的模型文件</option>
+                                            {% for model in uploaded_models %}
+                                            <option value="{{ model }}">{{ model }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="form-text">从已上传模型目录中选择模型文件</div>
+                                    </div>
+                                </div>
+
+                                <div id="existingModelOptions" style="display: none;">
+                                    <div class="mb-3">
+                                        <label for="existingModelSelect" class="form-label">已存在模型</label>
+                                        <select class="form-select" id="existingModelSelect">
+                                            <option value="">选择已存在的模型文件</option>
+                                            {% for model in existing_models %}
+                                            <option value="{{ model }}">{{ model }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="form-text">从项目模型目录中选择已存在的模型文件</div>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="card shadow-sm">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-play-circle me-1"></i>
+                                推理结果分类配置
+                            </div>
+                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal"
+                                data-bs-target="#addLabelModal">
+                                <i class="fas fa-plus"></i> 新增
+                            </button>
+                        </div>
+
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-bordered align-middle">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 35%">原始标签</th>
+                                            <th style="width: 35%">映射标签</th>
+                                            <th style="width: 30%" class="text-center">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="labelMapTable">
+                                        {% if inference_labels %}
+                                        {% for label in inference_labels %}
+                                        <tr data-labelId='{{label.id}}'>
+                                            <td>{{label.name}}</td>
+                                            <td>{{label.target}}</td>
+                                            <td>
+                                                <button class="btn btn-sm btn-danger"
+                                                    onclick="removeLabel(this,'{{label.id}}')">
+                                                    <i class="fas fa-trash"></i>移除
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                        {% else %}
+                                        <tr class="noneMsgTr">
+                                            <td colspan="3" style="text-align: center;">暂无映射标签</td>
+                                        </tr>
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-play-circle me-1"></i>
+                                推理结果
+                            </div>
+                            <div>
+                                <button class="btn btn-sm btn-primary" onclick="startInference(null)"
+                                    id="startInferenceBtn">
+                                    <i class="fas fa-plus"></i> 开始推理
+                                </button>
+                                <button class="btn btn-sm btn-primary" id="stopInferenceBtn" style="display: none;"
+                                    onclick="stopInference('{{ project.id }}',null)">
+                                    停止推理
+                                </button>
+                                <button class="btn btn-sm btn-success" onclick="exportZip()">
+                                    <i class="fas fa-file-archive"></i> 导出
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="card-body">
+                            <iframe id="inferenceMaterialIframe"
+                                src="{{ url_for('main.api_inference_material_page', project_id=project.id) }}"
+                                style="width: 100%; height: 500px; border: none;">
+                            </iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="addLabelModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-al modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">新增标签映射</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label">项目已有标签</label>
+                        <div class="border rounded p-2" style="max-height: 260px; overflow-y: auto;">
+                            {% if project_labels %}
+                            {% for label in project_labels %}
+                            <div class="form-check">
+                                <input class="form-check-input" data-name="{{ label.name }}" type="radio"
+                                    name="originLabel" value="{{ label.id }}">
+                                <label class="form-check-label">
+                                    {{ label.name }}
+                                </label>
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <div class="text-muted text-center py-3">
+                                暂无映射标签
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">映射后的标签</label>
+                        <input type="text" id="targetLabelInput" class="form-control" placeholder="请输入映射标签">
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    取消
+                </button>
+                <button type="button" class="btn btn-primary" id='addLabelBtn'>
+                    确定
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- 结果弹窗：包含加载推理结果的iframe -->
+<div class="modal fade" id="resultModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">推理结果详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="height: 70vh; overflow: hidden;">
+                <!-- 弹窗iframe：加载你的result接口模板页面 -->
+                <iframe id="resultIframe" width="100%" height="100%" frameborder="0"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.addEventListener('message', function (event) {
+        console.log('接收到消息：', event.origin, event.data)
+        if (!window.ALLOWED_ORIGINS.includes(event.origin)) return;
+
+        if (event.data.type === 'openResultModal') {
+            const { projectId, materialId } = event.data;
+            const resultIframe = document.getElementById('resultIframe');
+            resultIframe.src = `/api/inference/${projectId}/result/${materialId}`;
+
+            const modal = new bootstrap.Modal(document.getElementById('resultModal'));
+            modal.show();
+        }
+        if (event.data.type === "startInference") {
+            const { materialId } = event.data;
+            startInference(materialId)
+        }
+
+        if (event.data.type === 'stopInference') {
+            const { projectId, materialId } = event.data;
+            stopInference(projectId, materialId)
+        }
+    });
+
+    function stopInference(projectId, materialId) {
+        layer.confirm('确定要停止推理吗？', {
+            icon: 3,
+            title: '确认',
+            offset: 'center'
+        }, function (index) {
+            layer.close(index);
+
+            data = {
+                projectId: projectId,
+                materialId: materialId
+            }
+
+            fetch('{{ url_for("main.stop_inference", project_id=project.id) }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+                .then(response => response.json())
+                .then(response => {
+                    if (response.success) {
+                        layer.msg('停止推理成功！')
+
+                        sendMaterialMessage('refrensh')
+                    } else {
+                        layer.msg(response.message);
+                    }
+                })
+                .catch(error => {
+                });
+        })
+    }
+
+    function sendMaterialMessage(type, data = null) {
+        const inferenceMaterialIframe = document.getElementById('inferenceMaterialIframe');
+        if (inferenceMaterialIframe && inferenceMaterialIframe.contentWindow) {
+            inferenceMaterialIframe.contentWindow.postMessage(
+                { type: type, data: data },
+                window.location.origin
+            );
+        }
+    }
+
+    function exportZip() {
+        window.location.href = "/api/project/{{project.id}}/export_zip";
+    }
+
+    // 确保jQuery已加载
+    function initializeInferencePage() {
+        // 模型类型切换
+        const modelTypeRadios = document.querySelectorAll('input[name="modelType"]');
+        modelTypeRadios.forEach(radio => {
+            radio.addEventListener('change', function () {
+                document.getElementById('systemModelOptions').style.display = 'none';
+                document.getElementById('uploadModelOptions').style.display = 'none';
+                document.getElementById('uploadedModelOptions').style.display = 'none';
+                document.getElementById('existingModelOptions').style.display = 'none';
+
+                if (this.value === 'system') {
+                    document.getElementById('systemModelOptions').style.display = 'block';
+                } else if (this.value === 'upload') {
+                    document.getElementById('uploadModelOptions').style.display = 'block';
+                } else if (this.value === 'uploaded') {
+                    document.getElementById('uploadedModelOptions').style.display = 'block';
+                } else if (this.value === 'existing') {
+                    document.getElementById('existingModelOptions').style.display = 'block';
+                }
+            });
+        });
+
+        // 初始化时根据选中的模型类型显示相应选项
+        const checkedModelType = document.querySelector('input[name="modelType"]:checked');
+        if (checkedModelType) {
+            document.getElementById('systemModelOptions').style.display = 'none';
+            document.getElementById('uploadModelOptions').style.display = 'none';
+            document.getElementById('uploadedModelOptions').style.display = 'none';
+            document.getElementById('existingModelOptions').style.display = 'none';
+
+            if (checkedModelType.value === 'system') {
+                document.getElementById('systemModelOptions').style.display = 'block';
+            } else if (checkedModelType.value === 'upload') {
+                document.getElementById('uploadModelOptions').style.display = 'block';
+            } else if (checkedModelType.value === 'uploaded') {
+                document.getElementById('uploadedModelOptions').style.display = 'block';
+            } else if (checkedModelType.value === 'existing') {
+                document.getElementById('existingModelOptions').style.display = 'block';
+            }
+        }
+
+
+        document.getElementById('addLabelBtn').addEventListener('click', function () {
+            const origin = document.querySelector(
+                'input[name="originLabel"]:checked'
+            )
+
+            const originId = origin.value;                // id
+            const originName = origin.dataset.name;       // name
+
+            const target = document.getElementById("targetLabelInput").value.trim();
+
+            if (!origin) {
+                layer.msg("请选择一个原始标签");
+                return;
+            }
+            if (!target) {
+                layer.msg("请输入映射标签");
+                return;
+            }
+
+            const tbody = document.getElementById("labelMapTable");
+
+            const exists = Array.from(tbody.querySelectorAll('tr'))
+                .some(tr => tr.dataset.labelId === String(originId));
+
+            if (exists) {
+                layer.msg('该标签已添加，请勿重复添加');
+                return;
+            }
+
+            const tr = document.createElement("tr");
+            tr.dataset.labelId = originId;
+            tr.innerHTML = `
+        <td>${originName}</td>
+        <td>${target}</td>
+        <td class="text-center">
+            <button class="btn btn-sm btn-danger" onclick="removeTaskItem(this.${originId})">
+                <i class="fas fa-trash"></i>移除
+            </button>
+        </td>
+    `;
+
+            const formData = new FormData()
+            formData.append('target', target);
+
+            // 修改标签
+            const url = `/api/inference/labels/${originId}/update`;
+            fetch(url, {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(response => {
+                    if (response.success) {
+                        layer.msg('新增成功！')
+                        tbody.appendChild(tr);
+
+                    } else {
+                        layer.msg('新增失败！')
+                    }
+                })
+                .catch(error => {
+                    console.log('新增映射失败', error)
+                    layer.msg('新增失败！')
+                })
+                .finally(() => {
+                })
+
+            document.getElementById("targetLabelInput").value = "";
+            const checkedRadio = document.querySelector('input[name="originLabel"]:checked');
+            if (checkedRadio) {
+                checkedRadio.checked = false;
+            }
+
+            const noneMsgTr = document.querySelector('.noneMsgTr');
+            if (noneMsgTr) {
+                noneMsgTr.style.display = 'none';
+            }
+
+            bootstrap.Modal.getInstance(
+                document.getElementById("addLabelModal")
+            ).hide();
+        })
+
+        // 定时查询项目推理状态
+        function getInferenceStatus() {
+            // 停止推理按钮
+            let startInferenceBtn = document.getElementById('startInferenceBtn')
+
+            fetch('{{ url_for("main.get_inference_status", project_id=project.id) }}', {
+                method: 'GET',
+            })
+                .then(response => response.json())
+                .then(response => {
+                    if (!startInferenceBtn) return;
+                    if (response.success) {
+                        let stopInferenceBtn = document.getElementById("stopInferenceBtn")
+                        if (response.status === 'running') {
+                            // 推理中 -> 按钮不可点击，显示“推理中”
+                            startInferenceBtn.disabled = true;
+                            startInferenceBtn.textContent = '推理中';
+                            stopInferenceBtn.style.display = "block"
+                        } else if (response.status === 'finished') {
+                            // 推理完成或未开始 -> 按钮可点击，恢复原内容
+                            startInferenceBtn.disabled = false;
+                            startInferenceBtn.textContent = '开始推理';
+                            stopInferenceBtn.style.display = "none"
+                        } else if (response.status === 'error') {
+                            startInferenceBtn.disabled = false;
+                            startInferenceBtn.textContent = '开始推理';
+                            stopInferenceBtn.style.display = "none"
+                            layer.msg('推理出错，请重试');
+                        }
+                    } else {
+                        layer.msg(response.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('获取推理状态失败', error);
+                    stopInferenceBtn.style.display = "none"
+
+                });
+        }
+
+        setInterval(() => getInferenceStatus(), 5000)
+    }
+
+    function startInference(materialId) {
+        const modelType = document.querySelector('input[name="modelType"]:checked').value;
+        const systemModelSelect = document.getElementById('systemModelSelect');
+        const modelFileInput = document.getElementById('modelFile');
+        const uploadedModelSelect = document.getElementById('uploadedModelSelect');
+        const existingModelSelect = document.getElementById('existingModelSelect');
+
+        // 验证输入
+        if (modelType === 'system' && !systemModelSelect.value) {
+            alert('请选择系统模型');
+            return;
+        }
+
+        if (modelType === 'upload' && !modelFileInput.files.length) {
+            alert('请上传模型文件');
+            return;
+        }
+
+        if (modelType === 'uploaded' && !uploadedModelSelect.value) {
+            alert('请选择已上传模型');
+            return;
+        }
+
+        if (modelType === 'existing' && !existingModelSelect.value) {
+            alert('请选择已存在模型');
+            return;
+        }
+
+        // 构建表单数据
+        const formData = new FormData();
+        formData.append('model_type', modelType);
+
+        if (modelType === 'system') {
+            formData.append('system_model', systemModelSelect.value);
+        } else if (modelType === 'upload') {
+            formData.append('model_file', modelFileInput.files[0]);
+        } else if (modelType === 'uploaded') {
+            formData.append('uploaded_model', uploadedModelSelect.value);
+        } else if (modelType === 'existing') {
+            formData.append('existing_model', existingModelSelect.value);
+        }
+        if (materialId) {
+            formData.append('material_id', materialId);
+        }
+
+        // 发送请求
+        fetch('{{ url_for("main.run_inference", project_id=project.id) }}', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(response => {
+                if (response.success) {
+                    layer.msg('开始推理成功！')
+                    sendMaterialMessage('refrensh')
+                } else {
+                    layer.msg(response.message);
+                }
+            })
+            .catch(error => {
+            });
+    }
+
+    function removeLabel(button, labelId) {
+        const row = button.closest('tr');
+        if (row) {
+            row.remove();
+            const formData = new FormData()
+            formData.append('target', "");
+            const url = `/api/inference/labels/${labelId}/update`;
+            fetch(url, {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(response => {
+                    if (response.success) {
+                        layer.msg('移除成功！')
+                    } else {
+                        layer.msg('移除失败！')
+                    }
+                })
+                .catch(error => {
+                })
+                .finally(() => {
+                })
+        }
+    }
+
+
+    // 页面加载完成后初始化
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeInferencePage);
+    } else {
+        initializeInferencePage();
+    }
+
+</script>
+{% endblock %}

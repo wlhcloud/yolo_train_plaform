@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>推理父页面（Vue 版）</title>
+
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+    <!-- axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .label-bar {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .label-btn {
+            margin-right: 8px;
+            padding: 4px 10px;
+            border: 1px solid #ccc;
+            cursor: pointer;
+            background: #fff;
+        }
+
+        .label-btn.active {
+            background: #409eff;
+            color: #fff;
+            border-color: #409eff;
+        }
+
+        .content {
+            display: flex;
+            height: calc(100vh - 42px);
+        }
+
+        .material-list {
+            width: 220px;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+        }
+
+        .material-item {
+            padding: 10px;
+            cursor: pointer;
+        }
+
+        .material-item.active {
+            background: #f0f7ff;
+            color: #409eff;
+        }
+
+        .viewer {
+            flex: 1;
+            padding: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+
+        <!-- 标签栏 -->
+        <div class="label-bar">
+            <button v-for="label in labels" :key="label.id" class="label-btn"
+                :class="{ active: label.id === currentLabelId }" @click="selectLabel(label.id)">
+                {{ label.name }}
+            </button>
+        </div>
+
+        <!-- 主体 -->
+        <div class="content">
+            <!-- 素材列表 -->
+            <div class="material-list">
+                <div v-for="item in materials" :key="item.id" class="material-item"
+                    :class="{ active: item.id === currentMaterialId }" @click="selectMaterial(item)">
+                    {{ item.name }}
+                </div>
+            </div>
+
+            <!-- 右侧区域（后面接 canvas / video） -->
+            <div class="viewer">
+                <div v-if="currentMaterial">
+                    当前素材：{{ currentMaterial.name }}<br>
+                    当前标签ID：{{ currentLabelId }}
+                </div>
+                <div v-else>
+                    请选择素材
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp } = Vue
+
+        createApp({
+            data() {
+                return {
+                    projectId: 1,
+                    labels: [],
+                    materials: [],
+                    currentLabelId: null,
+                    currentMaterialId: null
+                }
+            },
+
+            computed: {
+                currentMaterial() {
+                    return this.materials.find(
+                        m => m.id === this.currentMaterialId
+                    )
+                }
+            },
+
+            mounted() {
+                this.fetchLabels()
+                this.fetchMaterials()
+            },
+
+            methods: {
+                async fetchLabels() {
+                    const res = await axios.get(`/api/project/${this.projectId}/labels`)
+                    this.labels = res.data.data || []
+                    if (this.labels.length > 0) {
+                        this.currentLabelId = this.labels[0].id
+                    }
+                },
+
+                async fetchMaterials() {
+                    const res = await axios.get(`/api/project/${this.projectId}/materials`)
+                    this.materials = res.data.data || []
+                },
+
+                selectLabel(labelId) {
+                    this.currentLabelId = labelId
+                },
+
+                selectMaterial(item) {
+                    this.currentMaterialId = item.id
+                }
+            }
+        }).mount("#app")
+    </script>
+</body>
+
+</html>

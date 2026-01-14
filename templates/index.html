@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}项目列表 - AI模型训练平台{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>AI模型训练平台 - 项目列表</h1>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createProjectModal">
+        <i class="fas fa-plus"></i> 创建项目
+    </button>
+</div>
+
+{% if projects %}
+<div class="row">
+    {% for project in projects %}
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">{{ project.name }}</h5>
+                <p class="card-text">{{ project.description or '无描述' }}</p>
+                <p class="text-muted small">
+                    <i class="fas fa-calendar"></i> 创建于 {{ project.created_at.strftime('%Y-%m-%d %H:%M') }}
+                </p>
+                <div class="btn-group" role="group">
+                    <a style="border-radius: 4px;" href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-eye"></i> 查看
+                    </a>
+                    <form method="POST" style="margin-left: 5px;" action="{{ url_for('main.delete_project', project_id=project.id) }}" 
+                          onsubmit="return confirm('确定要删除项目 {{ project.name }} 吗？此操作不可恢复！')">
+                        <button type="submit" class="btn btn-danger btn-sm">
+                            <i class="fas fa-trash"></i> 删除
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+    <h4 class="text-muted">暂无项目</h4>
+    <p class="text-muted">点击右上角按钮创建第一个项目</p>
+</div>
+{% endif %}
+
+<!-- 创建项目模态框 -->
+<div class="modal fade" id="createProjectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('main.create_project') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">创建新项目</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">项目名称 *</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">项目描述</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">创建</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,1279 @@
+<!-- Bootstrap CSS -->
+<script src="/static/js/jquery-2.1.4.min.js"></script>
+<link href="/static/css/bootstrap.min.css" rel="stylesheet">
+<script src="/static/js/layer/layer.js"></script>
+<!-- Font Awesome -->
+<link rel="stylesheet" href="/static/css/all.min.css">
+<script src="/static/js/bootstrap.bundle.min.js"></script>
+{% block extra_css %}
+<style>
+    .annotation-container {
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    #annotationCanvas {
+        max-width: 100%;
+        height: auto;
+        border: 1px solid #ddd;
+        display: block;
+        margin: 0 auto;
+    }
+
+    .annotation-sidebar {
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
+    }
+
+    .canvas-container {
+        position: relative;
+        text-align: center;
+    }
+
+    #fabricCanvas {
+        border: 1px solid #ddd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+
+    <div class="d-flex justify-content-between mb-3">
+        <div>
+            {% if images|length > 1 %}
+            {% for i in range(1, images|length) %}
+            {% if images[i].id == current_image.id %}
+            <a href="#" class="btn btn-secondary"
+                data-url="{{ url_for('main.task_annotate_image', project_id=project.id, task_id=task_id, image_id=images[i - 1].id) }}"
+                onclick="saveAndNavigate(this.dataset.url)">
+                <i class="fas fa-arrow-left"></i> 上一张
+            </a>
+            {% endif %}
+            {% endfor %}
+            {% endif %}
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <!-- 项目级别AI辅助标注开关 -->
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="projectAiAssistSwitch">
+                <label class="form-check-label" for="projectAiAssistSwitch">
+                    <i class="fas fa-brain"></i> 项目AI辅助标注
+                </label>
+            </div>
+            <div id="aiAssistStatus" class="text-muted small" style="display: none;">
+                <i class="fas fa-spinner fa-spin"></i> AI识别中...
+            </div>
+            <button id="manualAiDetect" class="btn btn-info" onclick="runLLMDetection()">
+                <i class="fas fa-magic"></i> 手动AI识别
+            </button>
+            <button id="saveAnnotations" class="btn btn-success">
+                <i class="fas fa-save"></i> 保存标注
+            </button>
+        </div>
+        <div>
+            {% if images|length > 1 %}
+            {% for i in range(images|length - 1) %}
+            {% if images[i].id == current_image.id %}
+            <a href="#" class="btn btn-secondary"
+                data-url="{{ url_for('main.task_annotate_image', project_id=project.id, task_id=task_id, image_id=images[i + 1].id) }}"
+                onclick="saveAndNavigate(this.dataset.url)">
+                下一张 <i class="fas fa-arrow-right"></i>
+            </a>
+            {% endif %}
+            {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-9">
+            <div class="annotation-container">
+                <div class="canvas-container">
+                    <canvas id="fabricCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="annotation-sidebar">
+                <!-- 标签页导航 -->
+                <ul class="nav nav-tabs mb-3" id="sidebarTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="labels-tab" data-bs-toggle="tab"
+                            data-bs-target="#labelsPane" type="button" role="tab">标签管理</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="annotations-tab" data-bs-toggle="tab"
+                            data-bs-target="#annotationsPane" type="button" role="tab">标注框列表</button>
+                    </li>
+                </ul>
+
+                <!-- 标签页内容 -->
+                <div class="tab-content" id="sidebarTabContent">
+                    <!-- 标签管理面板 -->
+                    <div class="tab-pane fade show active" id="labelsPane" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <button class="btn btn-sm btn-primary" data-bs-toggle="modal"
+                                    data-bs-target="#addLabelModal">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="labelsList">
+                                    <!-- 标签将通过JS动态加载 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 标注框列表面板 -->
+                    <div class="tab-pane fade" id="annotationsPane" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <div>
+                                    <button id="clearAllBtn" class="btn btn-sm btn-outline-danger me-1"
+                                        onclick="clearAllAnnotations()">
+                                        <i class="fas fa-trash-alt"></i> 清空
+                                    </button>
+                                    <button id="toggleAnnotationsBtn" class="btn btn-sm btn-outline-primary"
+                                        onclick="toggleAllAnnotations()">
+                                        <i class="fas fa-eye"></i> 隐藏
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between mb-2">
+                                    <small class="text-muted">标注框数量: <span id="annotationCount">0</span></small>
+                                </div>
+                                <div id="annotationsList">
+                                    <p class="text-muted">暂无标注</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加标签模态框 -->
+    <div class="modal fade" id="addLabelModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加标签</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="labelName" class="form-label">标签名称</label>
+                        <input type="text" class="form-control" id="labelName" placeholder="例如：人、车、狗">
+                    </div>
+                    <div class="mb-3">
+                        <label for="labelColor" class="form-label">标签颜色</label>
+                        <input type="color" class="form-control form-control-color" id="labelColor" value="#0066ff">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="saveLabelBtn">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑标签模态框 -->
+    <div class="modal fade" id="editLabelModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑标签</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="editLabelId">
+                    <div class="mb-3">
+                        <label for="editLabelName" class="form-label">标签名称</label>
+                        <input type="text" class="form-control" id="editLabelName">
+                    </div>
+                    <div class="mb-3">
+                        <label for="editLabelColor" class="form-label">标签颜色</label>
+                        <input type="color" class="form-control form-control-color" id="editLabelColor">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="updateLabelBtn">更新</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+<script>
+    // 全局变量
+    let canvas;
+    let currentImageId = parseInt('{{ current_image.id }}');
+    let projectId = parseInt('{{ project.id }}');
+    let taskId = parseInt('{{ task_id }}');
+    let labels = [];
+    let currentLabel = null;
+    let isDrawing = false;
+    let rectangle = null;
+
+    // 初始化Fabric.js画布
+    document.addEventListener('DOMContentLoaded', function () {
+        DOMContentLoaded();
+    });
+
+    window.DOMContentLoaded = function () {
+        initCanvas();
+        loadLabels();
+        initProjectAiAssist();
+
+        // 绑定标签保存按钮事件
+        document.getElementById('saveLabelBtn').addEventListener('click', createLabel);
+        document.getElementById('updateLabelBtn').addEventListener('click', updateLabel);
+
+        // 绑定保存标注按钮事件
+        document.getElementById('saveAnnotations').addEventListener('click', saveAnnotations);
+
+        // 页面卸载前保存标注
+        window.addEventListener('beforeunload', function (e) {
+            // 可以在这里添加自动保存逻辑
+        });
+    };
+    window.addEventListener('message', (event) => {
+        if (event.data === 'annotateModalShown') {
+            console.log("收到 annotateModalShown 消息");
+            window.DOMContentLoaded();
+        }
+    });
+
+
+    // 初始化画布
+    function initCanvas() {
+        // 清理可能存在的旧状态
+        isDrawing = false;
+        rectangle = null;
+
+        // 如果已有画布，先销毁它并清理事件
+        if (canvas) {
+            canvas.off('mouse:down');
+            canvas.off('mouse:move');
+            canvas.off('mouse:up');
+            canvas.off('object:modified');
+            canvas.off('object:moving');
+            canvas.off('selection:created');
+            canvas.off('selection:updated');
+            canvas.off('selection:cleared');
+            canvas.clear();
+            canvas.dispose();
+            canvas = null;
+        }
+
+        const img = new Image();
+        console.log("加载图片:", "{{ url_for('static', filename=current_image.path) }}");
+        img.src = "{{ url_for('static', filename=current_image.path) }}";
+
+        img.onload = function () {
+            const maxWidth = document.querySelector('.canvas-container').offsetWidth;
+            const scale = Math.min(1, maxWidth / img.width);
+            const canvasWidth = img.width * scale;
+            const canvasHeight = img.height * scale;
+
+            // 设置canvas尺寸
+            const fabricCanvas = document.getElementById('fabricCanvas');
+            fabricCanvas.width = canvasWidth;
+            fabricCanvas.height = canvasHeight;
+
+            // 初始化Fabric.js
+            canvas = new fabric.Canvas('fabricCanvas', {
+                selection: true,
+                width: canvasWidth,
+                height: canvasHeight
+            });
+            console.log("Fabric.js画布初始化完成，尺寸:", canvasWidth, "x", canvasHeight);
+
+            // 等待画布完全初始化
+            setTimeout(() => {
+                // 设置画布背景为图片
+                canvas.setBackgroundImage(img.src, canvas.renderAll.bind(canvas), {
+                    scaleX: scale,
+                    scaleY: scale
+                });
+
+                // 添加绘制矩形的功能
+                canvas.on('mouse:down', function (o) {
+                    // 如果没有选择标签或点击在现有对象上，则不开始绘制
+                    if (!currentLabel) return;
+
+                    const target = canvas.findTarget(o.e);
+                    if (!target) {
+                        isDrawing = true;
+                        const pointer = canvas.getPointer(o.e);
+
+                        rectangle = new fabric.Rect({
+                            left: pointer.x,
+                            top: pointer.y,
+                            originX: 'left',
+                            originY: 'top',
+                            width: 0,
+                            height: 0,
+                            angle: 0,
+                            fill: currentLabel.color + '33',
+                            stroke: currentLabel.color,
+                            strokeWidth: 2,
+                            transparentCorners: false,
+                            cornerColor: 'rgba(0,0,0,0.5)',
+                            cornerSize: 12,
+                            labelId: currentLabel.id
+                        });
+
+                        canvas.add(rectangle);
+                    }
+                });
+
+                canvas.on('mouse:move', function (o) {
+                    if (!isDrawing) return;
+
+                    const pointer = canvas.getPointer(o.e);
+                    if (rectangle) {
+                        const left = Math.min(pointer.x, rectangle.left);
+                        const top = Math.min(pointer.y, rectangle.top);
+                        const width = Math.abs(pointer.x - rectangle.left);
+                        const height = Math.abs(pointer.y - rectangle.top);
+
+                        rectangle.set({ left: left, top: top, width: width, height: height });
+                        canvas.renderAll();
+                    }
+                });
+
+                canvas.on('mouse:up', function () {
+                    if (isDrawing) {
+                        isDrawing = false;
+                        // 鼠标释放后，实时更新标注列表
+                        updateAnnotationsList();
+                    }
+                });
+
+                // 当对象被修改时更新标注列表
+                canvas.on('object:modified', function () {
+                    updateAnnotationsList();
+                });
+
+                // 当对象被选中时
+                canvas.on('selection:created', function (e) {
+                    // 如果选择了矩形，可以进行修改
+                });
+
+                // 等待背景图片加载完成
+                setTimeout(() => {
+                    // 图片加载完成，标注将在loadLabels完成后自动加载
+                }, 100);
+            }, 50);
+        };
+    }
+
+    // 清空所有标注
+    function clearAllAnnotations() {
+        if (canvas) {
+            // 确认是否清空所有标注
+            if (confirm('确定要清空所有标注吗？此操作不可撤销。')) {
+                canvas.clear();
+
+                // 重新设置背景图片
+                const img = new Image();
+                img.src = "{{ url_for('static', filename=current_image.path) }}";
+
+                img.onload = function () {
+                    const maxWidth = document.querySelector('.canvas-container').offsetWidth;
+                    const scale = Math.min(1, maxWidth / img.width);
+
+                    canvas.setBackgroundImage(img.src, canvas.renderAll.bind(canvas), {
+                        scaleX: scale,
+                        scaleY: scale
+                    });
+
+                    // 更新标注列表
+                    updateAnnotationsList();
+                };
+            }
+        }
+    }
+
+    // 切换显示/隐藏所有标注
+    function toggleAllAnnotations() {
+        if (canvas) {
+            const objects = canvas.getObjects().filter(obj => obj.type === 'rect');
+            if (objects.length === 0) return;
+
+            const isVisible = objects.some(obj => obj.visible !== false);
+
+            objects.forEach(obj => {
+                obj.set('visible', !isVisible);
+            });
+
+            canvas.renderAll();
+
+            // 更新按钮文字
+            const toggleBtn = document.getElementById('toggleAnnotationsBtn');
+            if (toggleBtn) {
+                toggleBtn.innerHTML = isVisible ?
+                    '<i class="fas fa-eye"></i> 显示' :
+                    '<i class="fas fa-eye-slash"></i> 隐藏';
+            }
+        }
+    }
+
+    // 实时更新标注列表
+    function updateAnnotationsList() {
+        if (!canvas) return;
+        const objects = canvas.getObjects().filter(obj => obj.type === 'rect');
+        renderAnnotationsList(objects);
+    }
+
+    // 加载标签
+    function loadLabels() {
+        fetch(`/api/project/${projectId}/labels`)
+            .then(response => response.json())
+            .then(data => {
+                labels = data;
+                renderLabels();
+                // 标签加载完成后再加载标注
+                loadAnnotations();
+            });
+    }
+
+    // 渲染标签列表
+    function renderLabels() {
+        const labelsList = document.getElementById('labelsList');
+        labelsList.innerHTML = '';
+
+        if (labels.length === 0) {
+            labelsList.innerHTML = '<p class="text-muted">暂无标签</p>';
+            return;
+        }
+
+        labels.forEach(label => {
+            const labelElement = document.createElement('div');
+            labelElement.className = 'd-flex justify-content-between align-items-center  px-20  ';
+
+            labelElement.innerHTML = `
+            <span style='position: absolute;
+    background: ${label.color};
+    width: 8px;
+    height: 8px;
+    border-radius: 25px;left: 3px;'></span><div>
+                ${label.name}
+            </div>
+            <div>
+                <button class="btn btn-sm btn-outline-primary me-1" style="height: 28px;border: 0px;" onclick="selectLabel(${label.id})">
+                    <i class="fas fa-mouse-pointer"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-warning me-1" style="height: 28px;border: 0px;" onclick="editLabel(${label.id})">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" style="height: 28px;border: 0px;" onclick="deleteLabel(${label.id})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+
+            labelsList.appendChild(labelElement);
+
+            // 如果这是当前选中的标签，高亮显示
+            if (currentLabel && currentLabel.id === label.id) {
+                labelElement.classList.add('bg-light');
+            }
+        });
+    }
+
+    // 选择标签
+    function selectLabel(labelId) {
+        currentLabel = labels.find(label => label.id === labelId);
+        renderLabels(); // 重新渲染以显示选中状态
+    }
+
+    // 创建标签
+    function createLabel() {
+        const name = document.getElementById('labelName').value.trim();
+        const color = document.getElementById('labelColor').value;
+
+        if (!name) {
+            layer.msg('请输入标签名称');
+            return;
+        }
+
+        fetch(`/api/project/${projectId}/labels/create`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name, color })
+        })
+            .then(response => response.json())
+            .then(data => {
+                labels.push(data);
+                renderLabels();
+                document.getElementById('labelName').value = '';
+                // 关闭模态框
+                const modal = bootstrap.Modal.getInstance(document.getElementById('addLabelModal'));
+                if (modal) {
+                    modal.hide();
+                }
+            })
+            .catch(error => {
+                console.error('Error creating label:', error);
+                layer.msg('创建标签失败');
+            });
+    }
+
+    // 编辑标签
+    function editLabel(labelId) {
+        const label = labels.find(l => l.id === labelId);
+        if (label) {
+            document.getElementById('editLabelId').value = label.id;
+            document.getElementById('editLabelName').value = label.name;
+            document.getElementById('editLabelColor').value = label.color;
+            // 显示模态框
+            new bootstrap.Modal(document.getElementById('editLabelModal')).show();
+        }
+    }
+
+    // 更新标签
+    function updateLabel() {
+        const labelId = document.getElementById('editLabelId').value;
+        const name = document.getElementById('editLabelName').value.trim();
+        const color = document.getElementById('editLabelColor').value;
+
+        if (!name) {
+            layer.msg('请输入标签名称');
+            return;
+        }
+
+        // 调用后端API更新标签
+        fetch(`/api/project/${projectId}/labels/${labelId}/update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name, color })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 更新本地标签列表
+                    const labelIndex = labels.findIndex(l => l.id == labelId);
+                    if (labelIndex !== -1) {
+                        labels[labelIndex] = data;
+                    }
+                    renderLabels();
+                    // 关闭模态框
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editLabelModal'));
+                    if (modal) {
+                        modal.hide();
+                    }
+                } else {
+                    layer.msg('更新失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error updating label:', error);
+                layer.msg('更新标签时发生错误');
+            });
+    }
+
+    // 删除标签
+    function deleteLabel(labelId) {
+        if (!confirm('确定要删除这个标签吗？')) {
+            return;
+        }
+
+        fetch(`/api/project/${projectId}/labels/${labelId}/delete`, {
+            method: 'POST'
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    labels = labels.filter(label => label.id !== labelId);
+                    renderLabels();
+
+                    // 如果删除的是当前选中的标签，清除选中状态
+                    if (currentLabel && currentLabel.id === labelId) {
+                        currentLabel = null;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting label:', error);
+                layer.msg('删除标签失败');
+            });
+    }
+
+    // 渲染标注列表
+    function renderAnnotationsList(annotations) {
+        const annotationsList = document.getElementById('annotationsList');
+        const annotationCount = document.getElementById('annotationCount');
+
+        // 更新标注数量显示
+        if (annotationCount) {
+            annotationCount.textContent = annotations.length;
+        }
+
+        annotationsList.innerHTML = '';
+
+        if (annotations.length === 0) {
+            annotationsList.innerHTML = '<p class="text-muted">暂无标注</p>';
+            // 更新切换按钮文字
+            const toggleBtn = document.getElementById('toggleAnnotationsBtn');
+            if (toggleBtn) {
+                toggleBtn.innerHTML = '<i class="fas fa-eye"></i> 隐藏';
+            }
+            return;
+        }
+
+        // 如果传入的是Fabric.js对象而不是原始数据，我们需要转换一下
+        const displayAnnotations = annotations.map((ann, index) => {
+            // 如果是Fabric.js对象，提取我们需要的信息
+            if (ann.type === 'rect') {
+                return {
+                    label_id: ann.labelId,
+                    width: ann.width * ann.scaleX,
+                    height: ann.height * ann.scaleY,
+                    left: ann.left,
+                    top: ann.top
+                };
+            }
+            return ann;
+        });
+
+        displayAnnotations.forEach((ann, index) => {
+            const label = labels.find(l => l.id === ann.label_id);
+            if (!label) return;
+
+            // 计算实际像素尺寸和坐标
+            let pixelWidth, pixelHeight, pixelLeft, pixelTop;
+            if (ann.width && ann.height && ann.left !== undefined && ann.top !== undefined) {
+                // 如果是Fabric.js对象，直接使用像素尺寸和坐标
+                // 确保值是有效数字
+                pixelWidth = Math.max(0, Math.round(ann.width)) || 0;
+                pixelHeight = Math.max(0, Math.round(ann.height)) || 0;
+                pixelLeft = Math.max(0, Math.round(ann.left)) || 0;
+                pixelTop = Math.max(0, Math.round(ann.top)) || 0;
+            } else {
+                // 如果是相对坐标数据，需要转换为像素
+                // 确保canvas存在且有有效值
+                if (canvas) {
+                    pixelWidth = Math.max(0, Math.round((ann.width || 0) * canvas.width)) || 0;
+                    pixelHeight = Math.max(0, Math.round((ann.height || 0) * canvas.height)) || 0;
+                    // 计算左上角坐标
+                    const x = ann.x || 0;
+                    const y = ann.y || 0;
+                    const w = ann.width || 0;
+                    const h = ann.height || 0;
+                    pixelLeft = Math.max(0, Math.round(x * canvas.width - (w * canvas.width) / 2)) || 0;
+                    pixelTop = Math.max(0, Math.round(y * canvas.height - (h * canvas.height) / 2)) || 0;
+                } else {
+                    pixelWidth = pixelHeight = pixelLeft = pixelTop = 0;
+                }
+            }
+
+            const annotationElement = document.createElement('div');
+            annotationElement.className = 'd-flex justify-content-between align-items-center mb-2 p-2 border rounded';
+            annotationElement.style.borderLeft = `4px solid ${label.color}`;
+            // 为每个标注元素添加唯一ID，便于删除
+            annotationElement.id = `annotation-${index}`;
+
+            annotationElement.innerHTML = `
+            <div>
+                <strong>${label.name}</strong><br>
+                <small>位置: (${pixelLeft}, ${pixelTop})</small><br>
+                <small>尺寸: ${pixelWidth}px × ${pixelHeight}px</small>
+            </div>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteAnnotation(${index})">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+
+            annotationsList.appendChild(annotationElement);
+        });
+
+        // 更新切换按钮文字
+        const toggleBtn = document.getElementById('toggleAnnotationsBtn');
+        if (toggleBtn) {
+            toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i> 显示';
+        }
+    }
+
+    // 删除标注
+    function deleteAnnotation(index) {
+        const objects = canvas.getObjects().filter(obj => obj.type === 'rect');
+        if (index < objects.length) {
+            // 从画布上移除标注
+            canvas.remove(objects[index]);
+            // 实时更新标注列表
+            updateAnnotationsList();
+        }
+    }
+
+    // 保存标注
+    function saveAnnotations() {
+        if (!canvas) {
+            layer.msg('画布尚未初始化');
+            return;
+        }
+
+        const objects = canvas.getObjects();
+        const annotations = [];
+
+        objects.forEach(obj => {
+            if (obj.type === 'rect') {
+                // 确保所有值都是有效数字
+                const left = parseFloat(obj.left) || 0;
+                const top = parseFloat(obj.top) || 0;
+                const width = parseFloat(obj.width * obj.scaleX) || 0;
+                const height = parseFloat(obj.height * obj.scaleY) || 0;
+
+                // 正确计算归一化坐标
+                const centerX = Math.max(0, Math.min(1, (left + width / 2) / canvas.width));
+                const centerY = Math.max(0, Math.min(1, (top + height / 2) / canvas.height));
+                const normWidth = Math.max(0, Math.min(1, width / canvas.width));
+                const normHeight = Math.max(0, Math.min(1, height / canvas.height));
+
+                annotations.push({
+                    label_id: obj.labelId,
+                    x: centerX,
+                    y: centerY,
+                    width: normWidth,
+                    height: normHeight
+                });
+            }
+        });
+
+        fetch(`/api/image/${currentImageId}/annotations/save`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ annotations })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    layer.msg('标注保存成功');
+                } else {
+                    layer.msg('标注保存失败');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving annotations:', error);
+                layer.msg('保存标注时发生错误');
+            });
+    }
+
+    // 自动保存并导航到新页面
+    function saveAndNavigate(url) {
+        // 如果画布未初始化，直接导航
+        if (!canvas) {
+            window.location.href = url;
+            return;
+        }
+
+        // 获取当前画布上的所有标注对象
+        const objects = canvas.getObjects();
+        const annotations = [];
+
+        objects.forEach(obj => {
+            if (obj.type === 'rect') {
+                // 确保所有值都是有效数字
+                const left = parseFloat(obj.left) || 0;
+                const top = parseFloat(obj.top) || 0;
+                const width = parseFloat(obj.width * obj.scaleX) || 0;
+                const height = parseFloat(obj.height * obj.scaleY) || 0;
+
+                // 防止负值和过大的尺寸
+                const safeLeft = Math.max(0, left);
+                const safeTop = Math.max(0, top);
+                const safeWidth = Math.max(0, Math.min(canvas.width, width));
+                const safeHeight = Math.max(0, Math.min(canvas.height, height));
+
+                // 正确计算归一化坐标
+                const centerX = Math.max(0, Math.min(1, (safeLeft + safeWidth / 2) / canvas.width));
+                const centerY = Math.max(0, Math.min(1, (safeTop + safeHeight / 2) / canvas.height));
+                const normWidth = Math.max(0, Math.min(1, safeWidth / canvas.width));
+                const normHeight = Math.max(0, Math.min(1, safeHeight / canvas.height));
+
+                annotations.push({
+                    label_id: obj.labelId,
+                    x: centerX,
+                    y: centerY,
+                    width: normWidth,
+                    height: normHeight
+                });
+            }
+        });
+
+        // 发送保存请求
+        fetch(`/api/image/${currentImageId}/annotations/save`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ annotations })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 保存成功后清理画布状态再导航
+                    if (canvas) {
+                        canvas.off('mouse:down');
+                        canvas.off('mouse:move');
+                        canvas.off('mouse:up');
+                        canvas.off('object:modified');
+                        canvas.off('object:moving');
+                        canvas.off('selection:created');
+                        canvas.off('selection:updated');
+                        canvas.off('selection:cleared');
+                        canvas.clear();
+                        canvas.dispose();
+                        canvas = null;
+                    }
+                    // 导航到新页面
+                    window.location.href = url;
+                } else {
+                    console.warn('保存失败: ' + (data.message || '未知错误'));
+                    // 即使保存失败，也继续导航到新页面
+                    window.location.href = url;
+                }
+            })
+            .catch(error => {
+                console.error('Error saving annotations:', error);
+                // 即使保存失败，也继续导航到新页面
+                window.location.href = url;
+            });
+    }
+
+    // 加载标注
+    function loadAnnotations() {
+        fetch(`/api/image/${currentImageId}/annotations`)
+            .then(response => response.json())
+            .then(annotations => {
+                // 确保画布已初始化
+                if (!canvas) {
+                    setTimeout(() => loadAnnotations(), 100);
+                    return;
+                }
+
+                // 确保背景已设置
+                if (!canvas.backgroundImage) {
+                    setTimeout(() => loadAnnotations(), 100);
+                    return;
+                }
+
+                // 添加标注框
+                annotations.forEach(ann => {
+                    // 确保所有值都是有效数字
+                    const label = labels.find(l => l.id === ann.label_id);
+                    if (!label) return;
+
+                    // 确保坐标和尺寸值有效
+                    const x = Math.max(0, Math.min(1, parseFloat(ann.x) || 0));
+                    const y = Math.max(0, Math.min(1, parseFloat(ann.y) || 0));
+                    const width = Math.max(0, Math.min(1, parseFloat(ann.width) || 0));
+                    const height = Math.max(0, Math.min(1, parseFloat(ann.height) || 0));
+
+                    // 正确计算基于归一化坐标的像素位置
+                    // x 和 y 是中心点坐标 (0-1)
+                    // width 和 height 是归一化宽度和高度 (0-1)
+                    const left = Math.max(0, x * canvas.width - (width * canvas.width) / 2);
+                    const top = Math.max(0, y * canvas.height - (height * canvas.height) / 2);
+                    const pixelWidth = Math.max(0, width * canvas.width);
+                    const pixelHeight = Math.max(0, height * canvas.height);
+
+                    // 检查计算结果是否有效
+                    if (isNaN(left) || isNaN(top) || isNaN(pixelWidth) || isNaN(pixelHeight)) {
+                        console.error('Invalid annotation coordinates:', ann);
+                        return;
+                    }
+
+                    const rect = new fabric.Rect({
+                        left: left,
+                        top: top,
+                        originX: 'left',
+                        originY: 'top',
+                        width: pixelWidth,
+                        height: pixelHeight,
+                        angle: 0,
+                        fill: label.color + '33',
+                        stroke: label.color,
+                        strokeWidth: 2,
+                        transparentCorners: false,
+                        cornerColor: 'rgba(0,0,0,0.5)',
+                        cornerSize: 12,
+                        hasControls: true,
+                        hasBorders: true,
+                        selectable: true,
+                        labelId: ann.label_id
+                    });
+
+                    canvas.add(rect);
+                });
+
+                canvas.renderAll();
+
+                // 加载完成后更新标注列表
+                updateAnnotationsList();
+
+                // 标注加载完成后，检查是否需要自动运行AI检测
+                checkAndRunAutoAIDetection();
+            })
+            .catch(error => {
+                console.error('Error loading annotations:', error);
+            });
+    }
+
+    // 初始化LLM辅助功能（保持向后兼容）
+    function initLLMAssist() {
+        initProjectAiAssist();
+    }
+
+    // 项目级别AI辅助标注功能
+    function initProjectAiAssist() {
+        const projectAiSwitch = document.getElementById('projectAiAssistSwitch');
+        const aiAssistStatus = document.getElementById('aiAssistStatus');
+
+        // 加载项目AI辅助标注设置
+        loadProjectAiAssistSetting();
+
+        // 开关状态变化
+        projectAiSwitch.addEventListener('change', function () {
+            updateProjectAiAssistSetting(this.checked);
+        });
+    }
+
+    // 加载项目AI辅助标注设置
+    function loadProjectAiAssistSetting() {
+        fetch(`/api/project/${projectId}/ai-assist`)
+            .then(response => response.json())
+            .then(data => {
+                const projectAiSwitch = document.getElementById('projectAiAssistSwitch');
+                projectAiSwitch.checked = data.ai_assist_enabled;
+            })
+            .catch(error => {
+                console.error('Error loading project AI assist setting:', error);
+            });
+    }
+
+    // 更新项目AI辅助标注设置
+    function updateProjectAiAssistSetting(enabled) {
+        fetch(`/api/project/${projectId}/ai-assist`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                ai_assist_enabled: enabled
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('项目AI辅助标注设置已更新:', enabled);
+                } else {
+                    console.error('更新项目AI辅助标注设置失败:', data.error);
+                    // 恢复开关状态
+                    document.getElementById('projectAiAssistSwitch').checked = !enabled;
+                }
+            })
+            .catch(error => {
+                console.error('Error updating project AI assist setting:', error);
+                // 恢复开关状态
+                document.getElementById('projectAiAssistSwitch').checked = !enabled;
+            });
+    }
+
+    // 检查LLM配置
+    function checkLLMConfig() {
+        fetch('/api/llm/config/active')
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success || !data.config) {
+                    layer.msg('请先在大模型配置页面配置并激活一个LLM模型');
+                    document.getElementById('llmAssistSwitch').checked = false;
+                    document.getElementById('llmDetectBtn').disabled = true;
+                }
+            })
+            .catch(error => {
+                console.error('Error checking LLM config:', error);
+                layer.msg('检查LLM配置时出错');
+                document.getElementById('llmAssistSwitch').checked = false;
+                document.getElementById('llmDetectBtn').disabled = true;
+            });
+    }
+
+    // 运行AI检测（自动或手动触发）
+    function runAIDetection(isAutomatic = false) {
+        const aiAssistStatus = document.getElementById('aiAssistStatus');
+        const projectAiSwitch = document.getElementById('projectAiAssistSwitch');
+
+        // 检查项目是否开启AI辅助标注
+        if (!projectAiSwitch.checked) {
+            return;
+        }
+
+        // 检查图片是否已加载
+        if (!canvas || !canvas.backgroundImage) {
+            if (!isAutomatic) {
+                console.log('图片未加载完成，等待加载...');
+            }
+            return;
+        }
+
+        // 显示识别状态
+        if (aiAssistStatus) {
+            aiAssistStatus.style.display = 'block';
+        }
+
+        // 创建临时canvas来获取图片数据（不压缩）
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        const img = canvas.backgroundImage._element;
+
+        tempCanvas.width = img.naturalWidth;
+        tempCanvas.height = img.naturalHeight;
+        tempCtx.drawImage(img, 0, 0);
+
+        // 使用高质量设置，避免压缩导致的坐标偏差
+        const imageData = tempCanvas.toDataURL('image/jpeg', 1.0);
+
+        // 发送到后端进行AI检测
+        fetch('/api/llm/detect', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                project_id: projectId,
+                image_data: imageData
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 处理检测结果
+                    if (data.detections && data.detections.length > 0) {
+                        addAIDetections(data.detections);
+                        if (!isAutomatic) {
+                            console.log(`AI识别完成！检测到 ${data.detections.length} 个目标`);
+                        }
+                    } else {
+                        if (!isAutomatic) {
+                            console.log('AI未能识别到任何目标');
+                        }
+                    }
+                } else {
+                    if (!isAutomatic) {
+                        console.error('AI识别失败: ' + (data.message || '未知错误'));
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error running AI detection:', error);
+                if (!isAutomatic) {
+                    console.error('AI识别时出错，请稍后再试');
+                }
+            })
+            .finally(() => {
+                // 隐藏识别状态
+                if (aiAssistStatus) {
+                    aiAssistStatus.style.display = 'none';
+                }
+            });
+    }
+
+    // 检查并运行自动AI检测
+    function checkAndRunAutoAIDetection() {
+        const projectAiSwitch = document.getElementById('projectAiAssistSwitch');
+
+        // 检查项目是否开启AI辅助标注
+        if (!projectAiSwitch || !projectAiSwitch.checked) {
+            return;
+        }
+
+        // 检查canvas和背景图片是否已准备好
+        if (!canvas || !canvas.backgroundImage) {
+            console.log('Canvas或背景图片未准备好，跳过自动AI检测');
+            return;
+        }
+
+        // 等待一小段时间确保所有资源都已加载完成
+        setTimeout(() => {
+            // 再次检查canvas状态
+            if (canvas && canvas.backgroundImage && canvas.backgroundImage.complete !== false) {
+                console.log('开始自动AI检测...');
+                runAIDetection(true);
+            } else {
+                console.log('图片仍在加载中，跳过自动AI检测');
+            }
+        }, 200);
+    }
+
+    // 向后兼容的LLM检测函数
+    function runLLMDetection() {
+        runAIDetection(false);
+    }
+
+    // 向后兼容的LLM检测结果添加函数
+    function addLLMDetections(detections) {
+        addAIDetections(detections);
+    }
+
+    // AI检测坐标转换现在使用与手动标注完全相同的逻辑，无需额外校正
+
+    // 添加AI检测结果到画布
+    function addAIDetections(detections) {
+        console.log('Canvas dimensions:', canvas.width, 'x', canvas.height);
+
+        detections.forEach(detection => {
+            const label = labels.find(l => l.name === detection.label);
+            if (!label) {
+                console.warn('未找到标签:', detection.label);
+                return;
+            }
+
+            console.log('原始检测数据:', detection);
+
+            // 确保坐标和尺寸值有效
+            const x = Math.max(0, Math.min(1, parseFloat(detection.x) || 0));
+            const y = Math.max(0, Math.min(1, parseFloat(detection.y) || 0));
+            const width = Math.max(0, Math.min(1, parseFloat(detection.width) || 0));
+            const height = Math.max(0, Math.min(1, parseFloat(detection.height) || 0));
+
+            console.log('归一化坐标:', { x, y, width, height });
+
+            // 使用与手动标注相同的坐标转换逻辑
+            // x 和 y 是中心点坐标 (0-1)
+            // width 和 height 是归一化宽度和高度 (0-1)
+            const left = Math.max(0, x * canvas.width - (width * canvas.width) / 2);
+            const top = Math.max(0, y * canvas.height - (height * canvas.height) / 2);
+            const pixelWidth = Math.max(0, width * canvas.width);
+            const pixelHeight = Math.max(0, height * canvas.height);
+
+            console.log('像素坐标计算:', {
+                left: left,
+                top: top,
+                pixelWidth: pixelWidth,
+                pixelHeight: pixelHeight
+            });
+
+            // 检查计算结果是否有效
+            if (isNaN(left) || isNaN(top) || isNaN(pixelWidth) || isNaN(pixelHeight)) {
+                console.error('Invalid AI detection coordinates:', detection);
+                return;
+            }
+
+            const finalLeft = left;
+            const finalTop = top;
+            const finalWidth = pixelWidth;
+            const finalHeight = pixelHeight;
+
+            console.log('最终坐标:', {
+                finalLeft: finalLeft,
+                finalTop: finalTop,
+                finalWidth: finalWidth,
+                finalHeight: finalHeight
+            });
+
+            const rect = new fabric.Rect({
+                left: finalLeft,
+                top: finalTop,
+                originX: 'left',
+                originY: 'top',
+                width: finalWidth,
+                height: finalHeight,
+                angle: 0,
+                fill: label.color + '33',
+                stroke: label.color,
+                strokeWidth: 2,
+                transparentCorners: false,
+                cornerColor: 'rgba(0,0,0,0.5)',
+                cornerSize: 12,
+                hasControls: true,
+                hasBorders: true,
+                selectable: true,
+                labelId: label.id
+            });
+
+            canvas.add(rect);
+        });
+
+        canvas.renderAll();
+        updateAnnotationsList();
+
+        // AI检测完成后自动保存到数据库
+        console.log('AI检测完成，自动保存标注到数据库...');
+        autoSaveAIDetections();
+    }
+
+    // 自动保存AI检测结果到数据库
+    function autoSaveAIDetections() {
+        if (!canvas) {
+            console.warn('画布未初始化，无法保存AI检测结果');
+            return;
+        }
+
+        const objects = canvas.getObjects();
+        const annotations = [];
+
+        objects.forEach(obj => {
+            if (obj.type === 'rect') {
+                // 确保所有值都是有效数字
+                const left = parseFloat(obj.left) || 0;
+                const top = parseFloat(obj.top) || 0;
+                const width = parseFloat(obj.width * obj.scaleX) || 0;
+                const height = parseFloat(obj.height * obj.scaleY) || 0;
+
+                // 正确计算归一化坐标
+                const centerX = Math.max(0, Math.min(1, (left + width / 2) / canvas.width));
+                const centerY = Math.max(0, Math.min(1, (top + height / 2) / canvas.height));
+                const normWidth = Math.max(0, Math.min(1, width / canvas.width));
+                const normHeight = Math.max(0, Math.min(1, height / canvas.height));
+
+                annotations.push({
+                    label_id: obj.labelId,
+                    x: centerX,
+                    y: centerY,
+                    width: normWidth,
+                    height: normHeight
+                });
+            }
+        });
+
+        // 发送保存请求
+        fetch(`/api/image/${currentImageId}/annotations/save`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ annotations })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('AI检测结果已自动保存到数据库');
+                } else {
+                    console.warn('AI检测结果自动保存失败:', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('自动保存AI检测结果时发生错误:', error);
+            });
+    }
+
+</script>
+{% endblock %}

@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}模型导出 - {{ project.name }} - AI模型训练平台{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 100%;">
+    <div class="row">
+        {% set current_nav_key = 'export'%}
+        {% include "project_nav.html"%}
+        <div class="col-10">
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            导出选项
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i> 请确保已完成模型训练后再进行导出操作
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>格式</th>
+                                            <th>描述</th>
+                                            <th>用途</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>ONNX</strong></td>
+                                            <td>开放式神经网络交换格式</td>
+                                            <td>跨平台部署，支持多种推理引擎</td>
+                                            <td>
+                                                <button class="btn btn-primary export-btn" data-format="onnx">
+                                                    <i class="fas fa-file-export"></i> 导出
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>TorchScript</strong></td>
+                                            <td>PyTorch序列化格式</td>
+                                            <td>在C++环境中部署PyTorch模型</td>
+                                            <td>
+                                                <button class="btn btn-primary export-btn" data-format="torchscript">
+                                                    <i class="fas fa-file-export"></i> 导出
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>TensorFlow Lite</strong></td>
+                                            <td>轻量级TensorFlow模型格式</td>
+                                            <td>移动和嵌入式设备部署</td>
+                                            <td>
+                                                <button class="btn btn-primary export-btn" data-format="tflite">
+                                                    <i class="fas fa-file-export"></i> 导出
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>CoreML</strong></td>
+                                            <td>Apple机器学习框架格式</td>
+                                            <td>iOS/macOS设备部署</td>
+                                            <td>
+                                                <button class="btn btn-primary export-btn" data-format="coreml">
+                                                    <i class="fas fa-file-export"></i> 导出
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            导出历史
+                        </div>
+                        <div class="card-body">
+                            {% if project.export_records %}
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>格式</th>
+                                            <th>导出时间</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for record in project.export_records|reverse %}
+                                        <tr>
+                                            <td><strong>{{ record.format.upper() }}</strong></td>
+                                            <td>{{ record.created_at | beijing_time }}</td>
+                                            <td>
+                                                <a href="{{ url_for('main.download_file', filename=record.path.replace(root_path + '/', '')) }}"
+                                                    class="btn btn-success btn-sm">
+                                                    <i class="fas fa-download"></i> 下载
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-history fa-3x text-muted mb-3"></i>
+                                <h4 class="text-muted">暂无导出记录</h4>
+                                <p class="text-muted">导出的模型将显示在这里</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header">
+                            模型信息
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label"><strong>项目名称:</strong></label>
+                                <p>{{ project.name }}</p>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label"><strong>标签类别:</strong></label>
+                                <p>
+                                    {% for label in project.labels %}
+                                    <span class="badge bg-primary me-1">{{ label.name }}</span>
+                                    {% else %}
+                                    <span class="text-muted">暂无标签</span>
+                                    {% endfor %}
+                                </p>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label"><strong>训练状态:</strong></label>
+                                <p>
+                                    {% if project.images | selectattr('dataset_type', 'equalto', 'train') | list |
+                                    length > 0 %}
+                                    <span class="text-success"><i class="fas fa-check-circle"></i> 可训练</span>
+                                    {% else %}
+                                    <span class="text-warning"><i class="fas fa-exclamation-circle"></i> 未训练</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label"><strong>最后更新:</strong></label>
+                                <p>{{ project.updated_at.strftime('%Y-%m-%d %H:%M') if project.updated_at else '从未' }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const projectId = '{{ project.id }}';
+
+        // 绑定导出按钮事件
+        document.querySelectorAll('.export-btn').forEach(button => {
+            button.addEventListener('click', function () {
+                const format = this.getAttribute('data-format');
+                exportModel(format);
+            });
+        });
+
+        // 导出模型
+        function exportModel(format) {
+            // 显示导出中提示
+            const button = event.target;
+            const originalHtml = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 导出中...';
+            button.disabled = true;
+
+            // 移除已存在的下载按钮
+            const existingDownloadButton = button.parentNode.querySelector('.download-btn');
+            if (existingDownloadButton) {
+                existingDownloadButton.remove();
+            }
+
+            fetch(`/api/project/${projectId}/export/${format}`, {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`模型导出成功: ${data.message}`);
+                        // 添加下载链接
+                        if (data.download_url) {
+                            const downloadLink = document.createElement('a');
+                            downloadLink.href = data.download_url;
+                            downloadLink.download = '';
+                            downloadLink.className = 'btn btn-success mt-2 download-btn';
+                            downloadLink.innerHTML = '<i class="fas fa-download"></i> 下载模型';
+                            button.parentNode.appendChild(downloadLink);
+                        }
+                        // 这里可以添加刷新导出历史
+                    } else {
+                        alert(`导出失败: ${data.message}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('导出错误:', error);
+                    alert('导出过程中发生错误: ' + error.message);
+                })
+                .finally(() => {
+                    // 恢复按钮状态
+                    button.innerHTML = originalHtml;
+                    button.disabled = false;
+                });
+        }
+    });
+</script>
+{% endblock %}

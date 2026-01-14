@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}图片管理 - {{ project.name }} - AI模型训练平台{% endblock %}
+
+{% block extra_css %}
+<style>
+    .image-card {
+        transition: transform 0.2s;
+    }
+
+    .image-card:hover {
+        transform: scale(1.02);
+    }
+
+    .image-placeholder {
+        background-color: #f8f9fa;
+        border: 2px dashed #dee2e6;
+        border-radius: 0.375rem;
+        text-align: center;
+        padding: 2rem;
+        margin-bottom: 1rem;
+    }
+
+    .drop-zone {
+        border: 2px dashed #007bff;
+        background-color: #f8f9fa;
+        border-radius: 0.375rem;
+        padding: 2rem;
+        text-align: center;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .drop-zone.dragover {
+        background-color: #e9ecef;
+        border-color: #0056b3;
+    }
+
+    .file-info {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+
+    /* 分页样式 */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        padding: 20px 0;
+    }
+
+    .pagination .page-item {
+        margin: 0 2px;
+    }
+
+    .pagination .page-link {
+        color: #007bff;
+        padding: 0.5rem 0.75rem;
+        text-decoration: none;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+    }
+
+    .pagination .page-item.active .page-link {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: white;
+    }
+
+    .pagination .page-item.disabled .page-link {
+        color: #6c757d;
+        pointer-events: none;
+        background-color: #fff;
+        border-color: #dee2e6;
+    }
+
+    /* 多选相关样式 */
+    .image-checkbox {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+    }
+
+    .image-card.selected {
+        border: 2px solid #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, .25);
+    }
+
+    .action-buttons {
+        margin-bottom: 1rem;
+    }
+
+    .action-buttons .btn {
+        margin-right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 100%;">
+    <div class="row">
+        {% set current_nav_key = 'images'%}
+        {% include "project_nav.html"%}
+        <div class="col-10">
+            <div class="row">
+                <ul class="nav nav-tabs" id="tabContainer">
+                    <li class="nav-item">
+                        <!-- 移除href=""避免默认跳转，添加data属性存储对应iframe的URL（按需修改） -->
+                        <a class="nav-link active" id="image-tab" aria-current="page" onclick="screenshotTab(this)"
+                            data-iframe-url="{{ url_for('main.images_upload', project_id=project.id) if project else '' }}">
+                            上传图片
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="rtsp-tab" onclick="screenshotTab(this)"
+                            data-iframe-url="{{ url_for('main.rtsp_capture', project_id=project.id) if project else '' }}">
+                            RTSP截图
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="video-tab" onclick="screenshotTab(this)"
+                            data-iframe-url="{{ url_for('main.video_capture', project_id=project.id) if project else '' }}">
+                            视频截图
+                        </a>
+                    </li>
+                </ul>
+
+                <!-- 新增iframe容器：用于承载切换后的iframe内容，初始化隐藏（切换后显示） -->
+                <div id="iframeContainer"
+                    style="width: 100%; height: 600px; margin-top: 10px; border: 1px solid #eee; border-radius: 4px;">
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    {% block extra_js %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // 触发默认Tab的切换逻辑
+            const defaultTab = document.getElementById('image-tab');
+            if (defaultTab) {
+                screenshotTab(defaultTab);
+            }
+        });
+
+        /**
+         * Tab切换函数：实现Tab高亮+对应iframe加载
+         * @param {HTMLElement} tabLink - 点击的Tab标签a元素（通过this传递）
+         */
+        function screenshotTab(tabLink) {
+            // 阻止a标签默认跳转行为
+            event.preventDefault();
+
+            // 2移除所有Tab的active高亮状态
+            const allTabLinks = document.querySelectorAll('#tabContainer .nav-link');
+            allTabLinks.forEach(link => {
+                link.classList.remove('active');
+                link.removeAttribute('aria-current');
+            });
+
+            // 给当前点击的Tab添加active高亮状态
+            tabLink.classList.add('active');
+            tabLink.setAttribute('aria-current', 'page');
+
+            const iframeUrl = tabLink.dataset.iframeUrl;
+            const iframeContainer = document.getElementById('iframeContainer');
+
+            if (!iframeUrl || iframeUrl === '#') {
+                iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #999;">暂无可用内容</div>';
+                return;
+            }
+
+            let iframe = iframeContainer.querySelector('iframe');
+            if (iframe) {
+                iframe.src = iframeUrl;
+            } else {
+                // 动态创建新iframe并插入容器
+                iframe = document.createElement('iframe');
+                iframe.src = iframeUrl;
+                iframe.width = '100%';
+                iframe.height = '100%';
+                iframe.frameBorder = '0'; // 移除iframe默认边框
+                iframe.allowFullscreen = true; // 允许全屏（可选，根据功能需求）
+
+                iframe.onload = function () {
+                    console.log(`[${tabLink.innerText}] iframe加载完成`);
+                };
+                iframe.onerror = function () {
+                    iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #f56c6c;">内容加载失败，请重试</div>';
+                };
+
+                iframeContainer.innerHTML = '';
+                iframeContainer.appendChild(iframe);
+            }
+        }
+    </script>
+    {% endblock %}
