@@ -15,8 +15,6 @@ class CameraService:
                 return {"success": False, "message": "RTSP地址不能为空"}
 
             # 启动RTSP截图线程
-            application = create_app()
-
             def rtsp_thread():
                 camera_capture.capture_rtsp_images(
                     project_id, rtsp_url, interval, max_count
@@ -90,8 +88,6 @@ class CameraService:
                 return {"success": False, "message": "设备信息不完整"}
 
             # 启动ONVIF截图线程（使用改进版本）
-            application = create_app()
-
             def onvif_thread():
                 # 使用改进的截图方法
                 camera_capture.capture_onvif_images_improved(
