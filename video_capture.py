@@ -16,7 +16,15 @@ class VideoCapture:
         # 维护视频截图线程状态，key为视频任务ID，value为任务详情
         self.video_threads = {}
 
-    def capture_video_images(self, project_id, video_file_content, interval, max_count):
+    def capture_video_images(
+        self,
+        project_id,
+        video_file_content,
+        interval,
+        max_count,
+        start_time=None,
+        end_time=None,
+    ):
         """
         从视频文件流中截取图片并保存到项目目录（不落地原视频，仅保存截图）
         Args:
@@ -31,6 +39,8 @@ class VideoCapture:
             return {"success": False, "message": "截图间隔必须在1-3600秒之间"}
         if max_count < 1 or max_count > 10000:
             return {"success": False, "message": "最大截图数量必须在1-10000之间"}
+        if start_time and end_time and start_time >= end_time:
+            return {"success": False, "message": "开始时间必须早于结束时间"}
 
         thread_id = f"video_{project_id}"
         self.video_threads[thread_id] = {
@@ -70,6 +80,17 @@ class VideoCapture:
                 self.video_threads[thread_id]["running"]
                 and self.video_threads[thread_id]["captured_count"] < max_count
             ):
+                # 检查时间范围限制
+                if start_time or end_time:
+                    current_time_sec = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+                    if start_time and current_time_sec < start_time:
+                        # 未到开始时间，跳过当前帧
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + 1)
+                        current_frame += 1
+                        continue
+                    if end_time and current_time_sec > end_time:
+                        # 超过结束时间，停止截图
+                        break
 
                 # 检查线程是否被终止（支持手动停止截图）
                 if not self.video_threads[thread_id]["running"]:
@@ -197,3 +218,96 @@ class VideoCapture:
         # 批量删除过期任务
         for thread_id in expired_thread_ids:
             del self.video_threads[thread_id]
+
+    def get_video_time_capture(
+        self, project_id, video_file_content, video_current_time
+    ):
+        """
+        根据指定时间从视频文件流中截取图片并保存到项目目录（不落地原视频，仅保存截图）
+        Args:
+            project_id (int): 项目ID
+            video_file_content : 视频文件流
+            video_current_time(float): 指定截图时间（秒）
+        """
+        if not video_file_content:
+            return {"success": False, "message": "视频文件不能为空"}
+
+        temp_video_path = None
+        try:
+            project_upload_dir = ProjectDirManager.ensure_project_upload_dir(project_id)
+
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+            temp_video_path = temp_file.name
+            temp_file.write(video_file_content)
+            temp_file.close()
+
+            cap = cv2.VideoCapture(temp_video_path)
+            if not cap.isOpened():
+                return {
+                    "success": False,
+                    "message": "无法打开视频文件，格式不支持或文件损坏",
+                }
+
+            fps = cap.get(cv2.CAP_PROP_FPS)  # 视频帧率（每秒帧数）
+            if fps <= 0:  # 兼容部分视频帧率获取失败的场景
+                fps = 25
+
+            frame_number = int(fps * video_current_time)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+
+            ret, frame = cap.read()
+            if not ret:
+                return {"success": False, "message": "无法读取指定时间的帧"}
+
+            timestamp = int(datetime.now().timestamp() * 1000)
+            filename = f"{timestamp}_video_time.jpg"
+            file_path = os.path.join(project_upload_dir, filename)
+
+            save_success = cv2.imwrite(file_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            if save_success:
+                with PILImage.open(file_path) as img:
+                    width, height = img.size
+
+                relative_path = ProjectDirManager.get_relative_path(file_path)
+                posix_path = ProjectDirManager.get_posix_path(relative_path)
+                posix_path = posix_path.replace("static/", "", 1)
+
+                from app import create_app
+
+                application = create_app()
+                with application.app_context():
+                    try:
+                        image_record = Image(
+                            filename=filename,
+                            original_filename=f"video_time_capture_{timestamp}.jpg",
+                            path=posix_path,
+                            project_id=project_id,
+                            width=width,
+                            height=height,
+                        )
+                        db.session.add(image_record)
+                        db.session.commit()
+                        return {"success": True, "current_time": video_current_time}
+                    except Exception as db_e:
+                        db.session.rollback()
+                        return {
+                            "success": False,
+                            "message": f"数据库保存失败: {str(db_e)}",
+                        }
+            else:
+                return {"success": False, "message": "截图保存失败"}
+        except Exception as e:
+            return {"success": False, "message": f"视频截图过程中出错: {str(e)}"}
+        finally:
+            if "cap" in locals() and cap.isOpened():
+                cap.release()
+                cv2.destroyAllWindows()
+
+            if temp_video_path and os.path.exists(temp_video_path):
+                try:
+                    os.unlink(temp_video_path)
+                except:
+                    pass
+
+
+video_capture = VideoCapture()

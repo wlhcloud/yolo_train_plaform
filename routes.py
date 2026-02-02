@@ -260,7 +260,7 @@ def project_images(project_id):
     # 获取分页参数
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 10, type=int)
-    return render_template("images.html",page=page, per_page=per_page, project=project)
+    return render_template("images.html", page=page, per_page=per_page, project=project)
 
 
 # 视频截图页面
@@ -312,7 +312,8 @@ def images_upload(project_id):
     return render_template(
         "images_upload.html",
         project=project,
-        page=page, per_page=per_page,
+        page=page,
+        per_page=per_page,
         images=images_pagination,
         imgs_count=imgs_count,
         label_count=result
@@ -865,7 +866,7 @@ def api_rtsp_status(project_id):
     return jsonify(result)
 
 
-@main.route("/api/project/<int:project_id>/video/start", methods=["POST"])
+@main.route("/api/project/<int:project_id>/video/start_auto_capture", methods=["POST"])
 def api_start_video_capture(project_id):
     """启动video截图（正确接收视频文件）"""
     try:
@@ -889,11 +890,80 @@ def api_start_video_capture(project_id):
                 400,
             )
 
+        start_time = request.form.get("start_time", None)
+        if start_time is not None:
+            try:
+                start_time = float(start_time)
+                if start_time < 0:
+                    return (
+                        jsonify({"success": False, "message": "开始时间必须大于等于0"}),
+                        400,
+                    )
+            except ValueError:
+                return (
+                    jsonify({"success": False, "message": "开始时间必须为数字"}),
+                    400,
+                )
+        else:
+            start_time = 0.04
+        end_time = request.form.get("end_time", None)
+        if end_time is not None:
+            try:
+                end_time = float(end_time)
+                if end_time <= 0:
+                    return (
+                        jsonify({"success": False, "message": "结束时间必须大于0"}),
+                        400,
+                    )
+            except ValueError:
+                return (
+                    jsonify({"success": False, "message": "结束时间必须为数字"}),
+                    400,
+                )
+        else:
+            end_time = None
+
         result = video_service.start_video_capture(
             project_id=project_id,
             video_file_content=video_file_content,
             interval=interval,
             max_count=max_count,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@main.route("/api/project/<int:project_id>/video/manual_capture", methods=["POST"])
+def api_manual_video_capture(project_id):
+    """启动video手动截图（正确接收视频文件）"""
+    try:
+        project = Project.query.get_or_404(project_id)
+
+        # 获取原文件对象
+        video_file = request.files.get("video")
+        if not video_file or video_file.filename == "":
+            return jsonify({"success": False, "message": "请上传有效的视频文件"}), 400
+
+        video_file_content = video_file.read()
+        if not video_file_content:
+            return jsonify({"success": False, "message": "上传的视频文件为空"}), 400
+
+        video_current_time = float(request.form.get("video_current_time", 0))
+        if video_current_time <= 0:
+            return (
+                jsonify({"success": False, "message": "视频当前时间必须大于0"}),
+                400,
+            )
+
+        result = video_service.get_video_time_capture(
+            project_id=project_id,
+            video_file_content=video_file_content,
+            video_current_time=video_current_time,
         )
 
         return jsonify(result)

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import os
 from app import create_app
 from managers.rtsp_threadpool_manager import rtsp_manager
 

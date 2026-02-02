@@ -84,13 +84,6 @@ def create_app():
     spec.loader.exec_module(routes)
     app.register_blueprint(routes.main)
 
-    # 初始化摄像头捕获管理器
-    from camera_capture import CameraCapture
-    from video_capture import VideoCapture
-
-    app.camera_capture = CameraCapture()
-    app.video_capture = VideoCapture()
-
     # 添加时区处理的模板过滤器
     @app.template_filter("beijing_time")
     def beijing_time_filter(dt):

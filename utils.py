@@ -152,3 +152,8 @@ def get_project_upload_path(project_id, filename=None):
     if filename:
         return os.path.join(base_path, filename)
     return base_path
+
+
+def get_app_root():
+    """获取应用根目录路径"""
+    return os.getcwd()

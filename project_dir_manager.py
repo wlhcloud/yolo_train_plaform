@@ -1,6 +1,8 @@
 import os
 from flask import current_app
 
+from utils import get_app_root
+
 
 class ProjectDirManager:
     """项目目录管理器，用于处理每个项目的独立目录结构"""
@@ -16,7 +18,7 @@ class ProjectDirManager:
         Returns:
             str: 项目上传目录的绝对路径
         """
-        return os.path.join(current_app.root_path, "static", "uploads", str(project_id))
+        return os.path.join(get_app_root(), "static", "uploads", str(project_id))
 
     @staticmethod
     def ensure_project_upload_dir(project_id):
@@ -44,9 +46,7 @@ class ProjectDirManager:
         Returns:
             str: 项目数据集目录的绝对路径
         """
-        return os.path.join(
-            current_app.root_path, "static", "datasets", str(project_id)
-        )
+        return os.path.join(get_app_root(), "static", "datasets", str(project_id))
 
     @staticmethod
     def ensure_project_dataset_dir(project_id):
@@ -74,7 +74,7 @@ class ProjectDirManager:
         Returns:
             str: 项目模型目录的绝对路径
         """
-        return os.path.join(current_app.root_path, "static", "models", str(project_id))
+        return os.path.join(get_app_root(), "static", "models", str(project_id))
 
     @staticmethod
     def ensure_project_model_dir(project_id):
@@ -102,7 +102,7 @@ class ProjectDirManager:
         Returns:
             str: 相对于应用根目录的路径
         """
-        return os.path.relpath(full_path, current_app.root_path)
+        return os.path.relpath(full_path, get_app_root())
 
     @staticmethod
     def get_posix_path(relative_path):
@@ -132,7 +132,7 @@ class ProjectDirManager:
             str: 项目数据集目录的绝对路径
         """
         return os.path.join(
-            current_app.root_path, "static", "inference_material", str(project_id)
+            get_app_root(), "static", "inference_material", str(project_id)
         )
 
     @staticmethod

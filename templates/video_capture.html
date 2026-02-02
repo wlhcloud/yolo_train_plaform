@@ -61,7 +61,6 @@
         margin-top: 15px;
         display: flex;
         gap: 10px;
-        flex-wrap: wrap;
     }
 
     .current-time {
@@ -87,66 +86,6 @@
         transform: translateY(-2px);
         box-shadow: 0 5px 15px rgba(37, 117, 252, 0.4);
     }
-
-    .upload-area {
-        border: 2px dashed #dee2e6;
-        border-radius: 8px;
-        padding: 40px 20px;
-        text-align: center;
-        background: #f8f9fa;
-        cursor: pointer;
-        transition: all 0.3s;
-    }
-
-    .upload-area:hover {
-        border-color: #0d6efd;
-        background: #e7f1ff;
-    }
-
-    .upload-area.dragover {
-        border-color: #0d6efd;
-        background: #e7f1ff;
-        transform: scale(1.02);
-    }
-
-    .upload-progress {
-        margin-top: 15px;
-        display: none;
-    }
-
-    .video-thumbnail {
-        width: 100%;
-        height: 120px;
-        object-fit: cover;
-        border-radius: 4px;
-    }
-
-    .video-list-item {
-        transition: all 0.2s;
-        cursor: pointer;
-    }
-
-    .video-list-item:hover {
-        background-color: #f8f9fa;
-        transform: translateX(5px);
-    }
-
-    .video-list-item.active {
-        background-color: #e7f1ff;
-        border-left: 4px solid #0d6efd;
-    }
-
-    .preview-image {
-        width: 100%;
-        height: 100px;
-        object-fit: cover;
-        border-radius: 4px;
-        transition: transform 0.2s;
-    }
-
-    .preview-image:hover {
-        transform: scale(1.05);
-    }
 </style>
 {% endblock %}
 
@@ -154,75 +93,35 @@
 <div style="overflow: hidden;">
     <div class="row">
         <div class="col-md-8">
-            <!-- 视频上传区域 -->
+            <!-- 视频播放和手动截图区域 -->
             <div class="card mb-4">
                 <div class="card-header">
                     <div class="d-flex justify-content-between align-items-center">
-                        <span>视频上传</span>
+                        <span>视频截图</span>
                         <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse"
-                            data-bs-target="#uploadHelp" aria-expanded="false" aria-controls="uploadHelp">
+                            data-bs-target="#manualHelp" aria-expanded="false" aria-controls="manualHelp">
                             <i class="fas fa-question-circle"></i> 帮助
                         </button>
                     </div>
                 </div>
                 <div class="card-body">
-                    <div class="collapse" id="uploadHelp">
+                    <div class="collapse" id="manualHelp">
                         <div class="alert alert-info">
-                            <h6>视频上传说明：</h6>
+                            <h6>手动截图说明：</h6>
                             <ul>
-                                <li>支持 MP4, AVI, MOV, WMV 等常见视频格式</li>
-                                <li>最大上传大小：1GB</li>
-                                <li>上传后视频将保存在当前项目中</li>
-                                <li>可以上传多个视频，在下方视频列表中选择</li>
+                                <li>上传视频文件后，视频将在下方播放器中加载</li>
+                                <li>使用播放器控制条可以控制视频播放进度</li>
+                                <li>点击"手动截图"按钮可以截取当前视频帧</li>
+                                <li>截图会自动保存到当前项目中</li>
                             </ul>
                         </div>
                     </div>
 
-                    <!-- 拖拽上传区域 -->
-                    <div id="uploadArea" class="upload-area">
-                        <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
-                        <h5>拖放视频文件到这里</h5>
-                        <p class="text-muted">或点击选择文件</p>
-                        <input type="file" id="videoUploadInput" class="d-none" accept="video/*" multiple>
-                        <button class="btn btn-primary mt-2" id="selectFileBtn">
-                            <i class="fas fa-folder-open"></i> 选择文件
-                        </button>
-                    </div>
-
-                    <!-- 上传进度 -->
-                    <div id="uploadProgress" class="upload-progress">
-                        <div class="d-flex justify-content-between mb-1">
-                            <span id="uploadFileName">正在上传...</span>
-                            <span id="uploadPercent">0%</span>
-                        </div>
-                        <div class="progress">
-                            <div id="uploadProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
-                                role="progressbar" style="width: 0%"></div>
-                        </div>
-                        <div class="text-center mt-2">
-                            <button class="btn btn-sm btn-danger" id="cancelUploadBtn">
-                                <i class="fas fa-times"></i> 取消上传
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 视频播放和手动截图区域 -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span>视频播放与手动截图</span>
-                        <span id="currentVideoInfo" class="badge bg-info" style="display: none;"></span>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <!-- 视频选择列表（当有多个视频时显示） -->
-                    <div id="videoListContainer" class="mb-3" style="display: none;">
-                        <h6>选择视频：</h6>
-                        <div id="videoList" class="list-group">
-                            <!-- 视频列表将动态生成 -->
-                        </div>
+                    <!-- 文件上传区域 -->
+                    <div class="mb-4">
+                        <label for="videoFile" class="form-label">选择视频文件</label>
+                        <input type="file" class="form-control" id="videoFile" name="videoFile" accept="video/*">
+                        <div class="form-text">支持 MP4, AVI, MOV, WMV 等常见视频格式</div>
                     </div>
 
                     <!-- 视频播放器区域 -->
@@ -252,7 +151,7 @@
 
                         <!-- 手动截图控制 -->
                         <div class="capture-controls">
-                            <button class="btn btn-primary manual-capture-btn" id="manualCaptureBtn" disabled>
+                            <button class="btn btn-primary manual-capture-btn" id="manualCaptureBtn">
                                 <i class="fas fa-camera"></i> 手动截图
                             </button>
                             <div class="d-flex align-items-center">
@@ -261,40 +160,15 @@
                                     style="width: 80px;" min="1" max="10" value="1">
                                 <span class="ms-2">张</span>
                             </div>
-                            <button class="btn btn-outline-success" id="batchCaptureBtn" disabled>
+                            <button class="btn btn-outline-success" id="batchCaptureBtn">
                                 <i class="fas fa-camera-retro"></i> 批量截图
                             </button>
-                            <div class="d-flex align-items-center">
-                                <label for="jumpTime" class="me-2 mb-0">跳转到：</label>
-                                <div class="input-group input-group-sm" style="width: 150px;">
-                                    <input type="number" id="jumpMinute" class="form-control" placeholder="分" min="0"
-                                        value="0">
-                                    <span class="input-group-text">:</span>
-                                    <input type="number" id="jumpSecond" class="form-control" placeholder="秒" min="0"
-                                        max="59" value="0">
-                                    <button class="btn btn-outline-secondary" type="button" id="jumpBtn">
-                                        <i class="fas fa-forward"></i>
-                                    </button>
-                                </div>
-                            </div>
                         </div>
-                    </div>
-
-                    <!-- 无视频提示 -->
-                    <div id="noVideoMessage" class="text-center py-5">
-                        <i class="fas fa-film fa-3x text-muted mb-3"></i>
-                        <h5 class="text-muted">请先上传视频</h5>
-                        <p class="text-muted">上传视频后，您可以在这里播放和截图</p>
                     </div>
 
                     <!-- 截图预览区域 -->
                     <div id="capturePreview" class="mt-4" style="display: none;">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="mb-0">截图预览</h6>
-                            <button class="btn btn-sm btn-outline-secondary" id="clearPreviewBtn">
-                                <i class="fas fa-trash"></i> 清空预览
-                            </button>
-                        </div>
+                        <h6>最近截图预览</h6>
                         <div id="previewContainer" class="row mt-2">
                             <!-- 截图预览将动态添加到这里 -->
                         </div>
@@ -326,15 +200,6 @@
                         </div>
                     </div>
 
-                    <!-- 视频选择（自动截图用） -->
-                    <div class="mb-3" id="autoVideoSelectContainer" style="display: none;">
-                        <label for="autoVideoSelect" class="form-label">选择视频</label>
-                        <select class="form-select" id="autoVideoSelect">
-                            <option value="">请选择视频</option>
-                            <!-- 视频选项将动态添加 -->
-                        </select>
-                    </div>
-
                     <form id="autoCaptureForm">
                         <div class="row">
                             <div class="col-md-6">
@@ -342,7 +207,7 @@
                                     <label for="interval" class="form-label">截图间隔（秒）</label>
                                     <div class="input-group">
                                         <input type="number" class="form-control" id="interval" min="1" max="3600"
-                                            value="5" required disabled>
+                                            value="5" required>
                                         <span class="input-group-text">秒</span>
                                     </div>
                                     <div class="form-text">每隔多少秒截图一次</div>
@@ -353,7 +218,7 @@
                                     <label for="maxCount" class="form-label">总截图数量</label>
                                     <div class="input-group">
                                         <input type="number" class="form-control" id="maxCount" min="1" max="10000"
-                                            value="10" required disabled>
+                                            value="10" required>
                                         <span class="input-group-text">张</span>
                                     </div>
                                     <div class="form-text">总共需要截图的数量</div>
@@ -367,7 +232,7 @@
                                     <label for="startTime" class="form-label">开始时间</label>
                                     <div class="input-group">
                                         <input type="number" class="form-control" id="startTime" min="0" value="0"
-                                            step="1" disabled>
+                                            step="1">
                                         <span class="input-group-text">秒</span>
                                     </div>
                                     <div class="form-text">从视频的哪个时间开始截图（默认为0）</div>
@@ -377,8 +242,7 @@
                                 <div class="mb-3">
                                     <label for="endTime" class="form-label">结束时间</label>
                                     <div class="input-group">
-                                        <input type="number" class="form-control" id="endTime" min="1" step="1"
-                                            disabled>
+                                        <input type="number" class="form-control" id="endTime" min="1" step="1">
                                         <span class="input-group-text">秒</span>
                                     </div>
                                     <div class="form-text">截到视频的哪个时间（留空则到视频结束）</div>
@@ -387,10 +251,10 @@
                         </div>
 
                         <div class="d-flex gap-2">
-                            <button class="btn btn-primary flex-fill" id="startAutoCaptureBtn" disabled>
+                            <button class="btn btn-primary" id="startAutoCaptureBtn">
                                 <i class="fas fa-play"></i> 开始自动截图
                             </button>
-                            <button class="btn btn-danger flex-fill" id="stopAutoCaptureBtn" disabled>
+                            <button class="btn btn-danger" id="stopAutoCaptureBtn" disabled>
                                 <i class="fas fa-stop"></i> 停止自动截图
                             </button>
                         </div>
@@ -401,25 +265,6 @@
 
         <!-- 状态显示区域 -->
         <div class="col-md-4">
-            <!-- 已上传视频列表 -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span>已上传视频</span>
-                        <span class="badge bg-secondary" id="videoCount">0个</span>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div id="uploadedVideosList" style="max-height: 200px; overflow-y: auto;">
-                        <div class="text-center text-muted py-3">
-                            <i class="fas fa-video-slash"></i>
-                            <p class="mt-2">暂无视频</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 截图状态 -->
             <div class="card mb-4">
                 <div class="card-header">
                     截图状态
@@ -431,37 +276,29 @@
                             <span class="status-indicator status-stopped"></span>
                             <span>未运行</span>
                         </div>
-                        <div class="progress mb-2" style="height: 10px;">
-                            <div id="autoCaptureProgress" class="progress-bar" role="progressbar" style="width: 0%">
-                            </div>
-                        </div>
-                        <div class="text-center">
+                        <div>
                             <small>已截图: <span id="autoCapturedCount">0</span>/<span id="autoMaxCount">0</span></small>
                         </div>
                     </div>
-
-                    <div class="mt-4">
-                        <h6>手动截图统计</h6>
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span>今日截图：</span>
-                            <span class="badge bg-primary" id="todayManualCount">0</span>
+                    <div class="mb-4">
+                        <h6>手动截图状态</h6>
+                        <div id="manualCaptureStatus" class="mb-2">
+                            <span class="status-indicator status-running"></span>
+                            <span>正常</span>
                         </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span>总计截图：</span>
-                            <span class="badge bg-success" id="totalManualCount">0</span>
+                        <div>
+                            <small>已截图: <span id="manualCapturedCount">0</span></small>
                         </div>
                     </div>
-
                     <div class="mt-4">
                         <h6>最近活动</h6>
                         <div id="recentActivity" style="max-height: 150px; overflow-y: auto;">
                             <div class="text-muted small">暂无活动记录</div>
                         </div>
                     </div>
-
                     <div class="mt-4">
-                        <button class="btn btn-sm btn-outline-primary w-100" id="refreshAllStatusBtn">
-                            <i class="fas fa-sync"></i> 刷新所有状态
+                        <button class="btn btn-sm btn-outline-primary" id="refreshAllStatusBtn">
+                            <i class="fas fa-sync"></i> 刷新状态
                         </button>
                     </div>
                 </div>
@@ -475,21 +312,11 @@
 <script>
     $(function () {
         const projectId = '{{ project.id }}';
-        let uploadedVideos = []; // 存储已上传的视频信息
-        let currentVideoId = null; // 当前选中的视频ID
+        let currentVideoFile = null;
         let autoCaptureInterval = null;
-        let uploadXHR = null; // 用于取消上传的XMLHttpRequest
 
         // DOM 元素
-        const uploadArea = document.getElementById('uploadArea');
-        const videoUploadInput = document.getElementById('videoUploadInput');
-        const selectFileBtn = document.getElementById('selectFileBtn');
-        const uploadProgress = document.getElementById('uploadProgress');
-        const uploadProgressBar = document.getElementById('uploadProgressBar');
-        const uploadPercent = document.getElementById('uploadPercent');
-        const uploadFileName = document.getElementById('uploadFileName');
-        const cancelUploadBtn = document.getElementById('cancelUploadBtn');
-
+        const videoFileInput = document.getElementById('videoFile');
         const videoPlayerContainer = document.getElementById('videoPlayerContainer');
         const videoPlayer = document.getElementById('videoPlayer');
         const videoSource = document.getElementById('videoSource');
@@ -499,23 +326,8 @@
         const manualCaptureBtn = document.getElementById('manualCaptureBtn');
         const batchCaptureBtn = document.getElementById('batchCaptureBtn');
         const captureCountInput = document.getElementById('captureCount');
-        const jumpBtn = document.getElementById('jumpBtn');
-        const jumpMinute = document.getElementById('jumpMinute');
-        const jumpSecond = document.getElementById('jumpSecond');
-        const noVideoMessage = document.getElementById('noVideoMessage');
-
         const capturePreview = document.getElementById('capturePreview');
         const previewContainer = document.getElementById('previewContainer');
-        const clearPreviewBtn = document.getElementById('clearPreviewBtn');
-
-        const videoListContainer = document.getElementById('videoListContainer');
-        const videoList = document.getElementById('videoList');
-        const currentVideoInfo = document.getElementById('currentVideoInfo');
-        const uploadedVideosList = document.getElementById('uploadedVideosList');
-        const videoCount = document.getElementById('videoCount');
-
-        const autoVideoSelectContainer = document.getElementById('autoVideoSelectContainer');
-        const autoVideoSelect = document.getElementById('autoVideoSelect');
 
         // 自动截图元素
         const autoCaptureForm = document.getElementById('autoCaptureForm');
@@ -531,423 +343,82 @@
         const autoCapturedCount = document.getElementById('autoCapturedCount');
         const autoMaxCount = document.getElementById('autoMaxCount');
         const autoCaptureProgress = document.getElementById('autoCaptureProgress');
-        const todayManualCount = document.getElementById('todayManualCount');
+        const manualCapturedCount = document.getElementById('manualCapturedCount');
         const totalManualCount = document.getElementById('totalManualCount');
         const recentActivity = document.getElementById('recentActivity');
         const refreshAllStatusBtn = document.getElementById('refreshAllStatusBtn');
 
-        // 1. 视频上传功能
-        selectFileBtn.addEventListener('click', function () {
-            videoUploadInput.click();
-        });
+        // 视频文件选择事件
+        videoFileInput.addEventListener('change', function (e) {
+            if (this.files && this.files[0]) {
+                currentVideoFile = this.files[0];
+                const videoURL = URL.createObjectURL(currentVideoFile);
 
-        uploadArea.addEventListener('click', function () {
-            videoUploadInput.click();
-        });
+                // 设置视频源
+                videoSource.src = videoURL;
+                videoPlayer.load();
 
-        // 拖拽上传功能
-        uploadArea.addEventListener('dragover', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('dragover');
-        });
+                // 显示视频播放器
+                videoPlayerContainer.style.display = 'block';
+                currentVideoName.textContent = currentVideoFile.name;
 
-        uploadArea.addEventListener('dragleave', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('dragover');
-        });
+                // 设置视频加载完成后的回调
+                videoPlayer.addEventListener('loadedmetadata', function () {
+                    const duration = videoPlayer.duration;
+                    videoDuration.textContent = formatTime(duration);
 
-        uploadArea.addEventListener('drop', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('dragover');
-
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                videoUploadInput.files = files;
-                handleVideoUpload(files[0]);
-            }
-        });
-
-        videoUploadInput.addEventListener('change', function (e) {
-            if (this.files && this.files.length > 0) {
-                handleVideoUpload(this.files[0]);
-            }
-        });
-
-        // 取消上传
-        cancelUploadBtn.addEventListener('click', function () {
-            if (uploadXHR) {
-                uploadXHR.abort();
-                uploadProgress.style.display = 'none';
-                layer.msg('上传已取消');
-            }
-        });
-
-        function handleVideoUpload(file) {
-            // 检查文件类型
-            if (!file.type.startsWith('video/')) {
-                layer.msg('请选择视频文件！');
-                return;
-            }
-
-            // 检查文件大小（限制1GB）
-            if (file.size > 1024 * 1024 * 1024) {
-                layer.msg('文件大小不能超过1GB！');
-                return;
-            }
-
-            // 显示上传进度
-            uploadProgress.style.display = 'block';
-            uploadFileName.textContent = `正在上传：${file.name}`;
-            uploadPercent.textContent = '0%';
-            uploadProgressBar.style.width = '0%';
-
-            // 创建FormData
-            const formData = new FormData();
-            formData.append('video', file);
-            formData.append('project_id', projectId);
-
-            // 使用XMLHttpRequest以便跟踪进度
-            uploadXHR = new XMLHttpRequest();
-
-            uploadXHR.upload.addEventListener('progress', function (e) {
-                if (e.lengthComputable) {
-                    const percentComplete = Math.round((e.loaded / e.total) * 100);
-                    uploadPercent.textContent = percentComplete + '%';
-                    uploadProgressBar.style.width = percentComplete + '%';
-                }
-            });
-
-            uploadXHR.addEventListener('load', function () {
-                if (uploadXHR.status === 200) {
-                    try {
-                        const response = JSON.parse(uploadXHR.responseText);
-                        if (response.success) {
-                            layer.msg('视频上传成功！');
-                            addActivity(`上传视频：${file.name}`);
-                            uploadProgress.style.display = 'none';
-
-                            // 添加到已上传视频列表
-                            addUploadedVideo(response.video);
-
-                            // 如果是第一个视频，自动选中并播放
-                            if (uploadedVideos.length === 1) {
-                                selectVideo(response.video.id);
-                            }
-                        } else {
-                            layer.msg('上传失败：' + response.message);
-                        }
-                    } catch (e) {
-                        layer.msg('解析响应失败');
-                    }
-                } else {
-                    layer.msg('上传失败，状态码：' + uploadXHR.status);
-                }
-            });
-
-            uploadXHR.addEventListener('error', function () {
-                layer.msg('上传过程中发生错误');
-                uploadProgress.style.display = 'none';
-            });
-
-            uploadXHR.addEventListener('abort', function () {
-                uploadProgress.style.display = 'none';
-            });
-
-            // 发送请求
-            uploadXHR.open('POST', `/api/project/${projectId}/video/upload`);
-            uploadXHR.send(formData);
-        }
-
-        // 2. 视频管理功能
-        function addUploadedVideo(videoInfo) {
-            // 添加到数组
-            uploadedVideos.push(videoInfo);
-
-            // 更新视频数量显示
-            videoCount.textContent = `${uploadedVideos.length}个`;
-
-            // 更新已上传视频列表
-            updateUploadedVideosList();
-
-            // 更新视频选择下拉框
-            updateVideoSelectOptions();
-
-            // 如果这是第一个视频，显示视频列表
-            if (uploadedVideos.length === 1) {
-                videoListContainer.style.display = 'block';
-                autoVideoSelectContainer.style.display = 'block';
-            }
-
-            // 隐藏无视频提示
-            noVideoMessage.style.display = 'none';
-        }
-
-        function updateUploadedVideosList() {
-            uploadedVideosList.innerHTML = '';
-
-            if (uploadedVideos.length === 0) {
-                uploadedVideosList.innerHTML = `
-                    <div class="text-center text-muted py-3">
-                        <i class="fas fa-video-slash"></i>
-                        <p class="mt-2">暂无视频</p>
-                    </div>
-                `;
-                return;
-            }
-
-            uploadedVideos.forEach(video => {
-                const videoItem = document.createElement('div');
-                videoItem.className = `video-list-item list-group-item list-group-item-action ${video.id === currentVideoId ? 'active' : ''}`;
-                videoItem.dataset.videoId = video.id;
-
-                videoItem.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-video text-primary me-2"></i>
-                        </div>
-                        <div class="flex-grow-1 ms-2">
-                            <div class="fw-bold text-truncate" style="max-width: 200px;">${video.filename}</div>
-                            <small class="text-muted">
-                                ${formatFileSize(video.size)} · ${formatDuration(video.duration)}
-                            </small>
-                        </div>
-                        <div class="flex-shrink-0">
-                            <button class="btn btn-sm btn-outline-danger delete-video-btn" data-video-id="${video.id}">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
-
-                // 点击选择视频
-                videoItem.addEventListener('click', function (e) {
-                    if (!e.target.classList.contains('delete-video-btn')) {
-                        selectVideo(video.id);
+                    // 设置结束时间默认值
+                    if (!endTimeInput.value || endTimeInput.value > duration) {
+                        endTimeInput.value = Math.floor(duration);
                     }
                 });
 
-                // 删除视频按钮
-                const deleteBtn = videoItem.querySelector('.delete-video-btn');
-                deleteBtn.addEventListener('click', function (e) {
-                    e.stopPropagation();
-                    deleteVideo(video.id);
+                // 更新当前时间
+                videoPlayer.addEventListener('timeupdate', function () {
+                    currentTime.textContent = formatTime(videoPlayer.currentTime);
                 });
 
-                uploadedVideosList.appendChild(videoItem);
-            });
-        }
-
-        function updateVideoSelectOptions() {
-            autoVideoSelect.innerHTML = '<option value="">请选择视频</option>';
-
-            uploadedVideos.forEach(video => {
-                const option = document.createElement('option');
-                option.value = video.id;
-                option.textContent = `${video.filename} (${formatDuration(video.duration)})`;
-                autoVideoSelect.appendChild(option);
-            });
-
-            // 如果当前有选中的视频，设置为选中状态
-            if (currentVideoId) {
-                autoVideoSelect.value = currentVideoId;
-                enableAutoCaptureForm();
-            } else {
-                disableAutoCaptureForm();
+                // 清除旧的截图预览
+                clearPreview();
+                capturePreview.style.display = 'none';
             }
-        }
+        });
 
-        function selectVideo(videoId) {
-            const video = uploadedVideos.find(v => v.id === videoId);
-            if (!video) return;
-
-            currentVideoId = videoId;
-
-            // 更新当前视频信息显示
-            currentVideoInfo.style.display = 'inline-block';
-            currentVideoInfo.textContent = video.filename;
-
-            // 更新视频播放器
-            videoSource.src = video.url;
-            videoPlayer.load();
-            videoPlayerContainer.style.display = 'block';
-            currentVideoName.textContent = video.filename;
-
-            // 启用手动截图按钮
-            manualCaptureBtn.disabled = false;
-            batchCaptureBtn.disabled = false;
-
-            // 更新视频列表选中状态
-            updateUploadedVideosList();
-
-            // 更新自动截图视频选择
-            autoVideoSelect.value = videoId;
-            enableAutoCaptureForm();
-
-            // 设置视频时长
-            videoPlayer.addEventListener('loadedmetadata', function () {
-                videoDuration.textContent = formatTime(videoPlayer.duration);
-
-                // 设置结束时间默认值
-                if (!endTimeInput.value || endTimeInput.value > videoPlayer.duration) {
-                    endTimeInput.value = Math.floor(videoPlayer.duration);
-                }
-
-                // 更新开始时间的最大值
-                startTimeInput.max = Math.floor(videoPlayer.duration) - 1;
-            }, { once: true });
-
-            // 更新当前时间显示
-            videoPlayer.addEventListener('timeupdate', function () {
-                currentTime.textContent = formatTime(videoPlayer.currentTime);
-            });
-
-            addActivity(`选择视频：${video.filename}`);
-        }
-
-        function deleteVideo(videoId) {
-            layer.confirm('确定要删除这个视频吗？删除后相关的截图也会被删除。', {
-                icon: 3,
-                title: '确认删除'
-            }, function (index) {
-                fetch(`/api/project/${projectId}/video/${videoId}`, {
-                    method: 'DELETE'
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            // 从数组中移除
-                            uploadedVideos = uploadedVideos.filter(v => v.id !== videoId);
-
-                            // 更新显示
-                            updateUploadedVideosList();
-                            updateVideoSelectOptions();
-                            videoCount.textContent = `${uploadedVideos.length}个`;
-
-                            // 如果删除的是当前视频
-                            if (currentVideoId === videoId) {
-                                currentVideoId = null;
-                                videoPlayerContainer.style.display = 'none';
-                                manualCaptureBtn.disabled = true;
-                                batchCaptureBtn.disabled = true;
-                                currentVideoInfo.style.display = 'none';
-                                disableAutoCaptureForm();
-
-                                // 如果没有其他视频了，显示无视频提示
-                                if (uploadedVideos.length === 0) {
-                                    videoListContainer.style.display = 'none';
-                                    autoVideoSelectContainer.style.display = 'none';
-                                    noVideoMessage.style.display = 'block';
-                                }
-                            }
-
-                            addActivity(`删除视频成功`);
-                            layer.msg('删除成功');
-                        } else {
-                            layer.msg('删除失败：' + data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        layer.msg('删除视频时发生错误');
-                    });
-
-                layer.close(index);
-            });
-        }
-
-        function enableAutoCaptureForm() {
-            intervalInput.disabled = false;
-            maxCountInput.disabled = false;
-            startTimeInput.disabled = false;
-            endTimeInput.disabled = false;
-            startAutoCaptureBtn.disabled = false;
-        }
-
-        function disableAutoCaptureForm() {
-            intervalInput.disabled = true;
-            maxCountInput.disabled = true;
-            startTimeInput.disabled = true;
-            endTimeInput.disabled = true;
-            startAutoCaptureBtn.disabled = true;
-        }
-
-        // 3. 视频播放控制
+        // 格式化时间显示
         function formatTime(seconds) {
             const mins = Math.floor(seconds / 60);
             const secs = Math.floor(seconds % 60);
             return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
 
-        function formatDuration(seconds) {
-            if (seconds < 60) {
-                return `${seconds}秒`;
-            } else if (seconds < 3600) {
-                const mins = Math.floor(seconds / 60);
-                const secs = seconds % 60;
-                return `${mins}分${secs}秒`;
-            } else {
-                const hours = Math.floor(seconds / 3600);
-                const mins = Math.floor((seconds % 3600) / 60);
-                return `${hours}小时${mins}分`;
-            }
-        }
-
-        function formatFileSize(bytes) {
-            if (bytes < 1024) return bytes + ' B';
-            else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-            else if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-            else return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
-        }
-
-        // 跳转到指定时间
-        jumpBtn.addEventListener('click', function () {
-            const minutes = parseInt(jumpMinute.value) || 0;
-            const seconds = parseInt(jumpSecond.value) || 0;
-            const totalSeconds = minutes * 60 + seconds;
-
-            if (videoPlayer.duration && totalSeconds <= videoPlayer.duration) {
-                videoPlayer.currentTime = totalSeconds;
-            } else {
-                layer.msg('时间超出视频范围');
-            }
-        });
-
-        // 4. 手动截图功能
+        // 手动截图
         manualCaptureBtn.addEventListener('click', function () {
-            if (!currentVideoId) {
-                layer.msg('请先选择视频！');
+            if (!currentVideoFile) {
+                layer.msg('请先选择视频文件！');
                 return;
             }
 
-            const video = uploadedVideos.find(v => v.id === currentVideoId);
-            if (!video) return;
+            // 创建FormData并添加截图数据
+            const formData = new FormData();
+            formData.append('video', currentVideoFile);
+            formData.append('video_current_time', videoPlayer.currentTime);
 
-            const captureData = {
-                video_id: currentVideoId,
-                current_time: videoPlayer.currentTime,
-                project_id: projectId
-            };
-
+            // 可以在这里添加canvas截图逻辑，或者调用后端API
+            // 这里假设后端API可以处理视频截图
             manualCaptureBtn.disabled = true;
             manualCaptureBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 截图中...';
 
             fetch(`/api/project/${projectId}/video/manual_capture`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(captureData)
+                body: formData
             })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
                         layer.msg('截图成功！');
-                        addActivity('手动截图成功');
+                        addActivity('手动截图成功', videoPlayer.currentTime);
                         updateManualStats();
-                        showPreview(data.image_url, videoPlayer.currentTime);
+                        // showPreview(data.image_url);
                     } else {
                         layer.msg('截图失败: ' + data.message);
                     }
@@ -962,134 +433,33 @@
                 });
         });
 
-        // 批量截图
-        batchCaptureBtn.addEventListener('click', function () {
-            if (!currentVideoId) {
-                layer.msg('请先选择视频！');
-                return;
-            }
-
-            const count = parseInt(captureCountInput.value) || 1;
-            if (count < 1 || count > 10) {
-                layer.msg('请输入1-10之间的数字！');
-                return;
-            }
-
-            batchCaptureBtn.disabled = true;
-            batchCaptureBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 批量截图中...';
-
-            // 批量截图
-            const batchData = {
-                video_id: currentVideoId,
-                current_time: videoPlayer.currentTime,
-                count: count,
-                project_id: projectId
-            };
-
-            fetch(`/api/project/${projectId}/video/batch_capture`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(batchData)
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        layer.msg(`批量截图完成，共截图${count}张`);
-                        addActivity(`批量截图${count}张完成`);
-                        updateManualStats();
-
-                        // 显示所有截图的预览
-                        data.images.forEach((img, index) => {
-                            setTimeout(() => {
-                                showPreview(img.url, videoPlayer.currentTime + (index * 2));
-                            }, index * 100);
-                        });
-                    } else {
-                        layer.msg('批量截图失败: ' + data.message);
-                    }
-                    batchCaptureBtn.disabled = false;
-                    batchCaptureBtn.innerHTML = '<i class="fas fa-camera-retro"></i> 批量截图';
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    layer.msg('批量截图时发生错误');
-                    batchCaptureBtn.disabled = false;
-                    batchCaptureBtn.innerHTML = '<i class="fas fa-camera-retro"></i> 批量截图';
-                });
-        });
-
-        // 5. 截图预览管理
-        function showPreview(imageUrl, timestamp) {
-            capturePreview.style.display = 'block';
-
-            const previewItem = document.createElement('div');
-            previewItem.className = 'col-4 col-md-3 mb-3';
-            previewItem.innerHTML = `
-                <div class="card h-100">
-                    <a href="${imageUrl}" target="_blank" class="text-decoration-none">
-                        <img src="${imageUrl}" class="preview-image" alt="截图预览">
-                    </a>
-                    <div class="card-body p-2">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <small class="text-muted">${formatTime(timestamp)}</small>
-                            <button class="btn btn-sm btn-outline-danger delete-preview-btn">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            // 限制只显示12张预览
-            if (previewContainer.children.length >= 12) {
-                previewContainer.removeChild(previewContainer.lastChild);
-            }
-
-            previewContainer.insertBefore(previewItem, previewContainer.firstChild);
-
-            // 添加删除按钮事件
-            const deleteBtn = previewItem.querySelector('.delete-preview-btn');
-            deleteBtn.addEventListener('click', function (e) {
-                e.preventDefault();
-                e.stopPropagation();
-                previewContainer.removeChild(previewItem);
-
-                // 如果没有预览了，隐藏预览区域
-                if (previewContainer.children.length === 0) {
-                    capturePreview.style.display = 'none';
-                }
-            });
+        // 清除预览
+        function clearPreview() {
+            previewContainer.innerHTML = '';
         }
 
-        clearPreviewBtn.addEventListener('click', function () {
-            previewContainer.innerHTML = '';
-            capturePreview.style.display = 'none';
-        });
+        // 更新手动截图统计
+        function updateManualStats() {
+            manualCapturedCount.textContent = parseInt(manualCapturedCount.textContent) + 1;
+        }
 
-        // 6. 自动截图功能
+        // 自动截图开始
         startAutoCaptureBtn.addEventListener('click', function (e) {
             e.preventDefault();
 
-            if (!currentVideoId) {
-                layer.msg('请先选择视频！');
+            if (!currentVideoFile) {
+                layer.msg('请先选择视频文件！');
                 return;
             }
 
-            const video = uploadedVideos.find(v => v.id === currentVideoId);
-            if (!video) return;
-
-            const autoCaptureData = {
-                video_id: currentVideoId,
-                interval: parseInt(intervalInput.value) || 5,
-                max_count: parseInt(maxCountInput.value) || 10,
-                start_time: parseInt(startTimeInput.value) || 0,
-                project_id: projectId
-            };
+            const formData = new FormData();
+            formData.append('video', currentVideoFile);
+            formData.append('interval', intervalInput.value || 5);
+            formData.append('max_count', maxCountInput.value || 10);
+            formData.append('start_time', startTimeInput.value || 0);
 
             if (endTimeInput.value) {
-                autoCaptureData.end_time = parseInt(endTimeInput.value);
+                formData.append('end_time', endTimeInput.value);
             }
 
             startAutoCaptureBtn.disabled = true;
@@ -1097,10 +467,7 @@
 
             fetch(`/api/project/${projectId}/video/start_auto_capture`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(autoCaptureData)
+                body: formData
             })
                 .then(response => response.json())
                 .then(data => {
@@ -1108,7 +475,6 @@
                         stopAutoCaptureBtn.disabled = false;
                         updateAutoCaptureStatus();
                         addActivity('开始自动截图');
-                        layer.msg('自动截图已启动');
                     } else {
                         layer.msg('启动失败: ' + data.message);
                         startAutoCaptureBtn.disabled = false;
@@ -1123,15 +489,13 @@
                 });
         });
 
+        // 停止自动截图
         stopAutoCaptureBtn.addEventListener('click', function () {
             stopAutoCaptureBtn.disabled = true;
             stopAutoCaptureBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 停止中...';
 
             fetch(`/api/project/${projectId}/video/stop_auto_capture`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
+                method: 'POST'
             })
                 .then(response => response.json())
                 .then(data => {
@@ -1141,7 +505,6 @@
                         stopAutoCaptureBtn.innerHTML = '<i class="fas fa-stop"></i> 停止自动截图';
                         updateAutoCaptureStatus();
                         addActivity('停止自动截图');
-                        layer.msg('自动截图已停止');
                     } else {
                         layer.msg('停止失败: ' + data.message);
                         stopAutoCaptureBtn.disabled = false;
@@ -1156,64 +519,15 @@
                 });
         });
 
-        // 自动截图视频选择
-        autoVideoSelect.addEventListener('change', function () {
-            if (this.value) {
-                selectVideo(this.value);
-            }
-        });
-
-        // 7. 状态管理和活动记录
-        function addActivity(message) {
-            const now = new Date();
-            const timeStr = now.toLocaleTimeString();
-
-            const activityItem = document.createElement('div');
-            activityItem.className = 'activity-item mb-2 pb-2 border-bottom';
-            activityItem.innerHTML = `
-                <div class="d-flex justify-content-between align-items-start">
-                    <span class="small">${message}</span>
-                    <small class="text-muted">${timeStr}</small>
-                </div>
-            `;
-
-            // 限制只显示5条记录
-            if (recentActivity.children.length >= 5) {
-                recentActivity.removeChild(recentActivity.lastChild);
-            }
-
-            recentActivity.insertBefore(activityItem, recentActivity.firstChild);
-
-            // 如果之前显示的是"暂无活动记录"，则移除
-            const noActivity = recentActivity.querySelector('.text-muted');
-            if (noActivity && noActivity.textContent === '暂无活动记录') {
-                recentActivity.removeChild(noActivity);
-            }
-        }
-
-        function updateManualStats() {
-            // 这里应该调用API获取统计数据
-            fetch(`/api/project/${projectId}/capture/stats`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        todayManualCount.textContent = data.today_count || 0;
-                        totalManualCount.textContent = data.total_count || 0;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                });
-        }
-
+        // 更新自动截图状态
         function updateAutoCaptureStatus() {
-            fetch(`/api/project/${projectId}/video/auto_capture_status`)
+            fetch(`/api/project/${projectId}/video/status`)
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success && data.status) {
+                    if (data.status) {
                         const captured = data.status.captured_count || 0;
                         const max = data.status.max_count || 1;
-                        const progress = max > 0 ? (captured / max) * 100 : 0;
+                        const progress = (captured / max) * 100;
 
                         if (data.status.running) {
                             autoCaptureStatus.innerHTML = '<span class="status-indicator status-running"></span> 运行中';
@@ -1248,35 +562,48 @@
         // 刷新所有状态
         refreshAllStatusBtn.addEventListener('click', function () {
             updateAutoCaptureStatus();
-            updateManualStats();
+            // 这里可以添加获取手动截图统计的API调用
             addActivity('手动刷新状态');
             layer.msg('状态已刷新');
         });
 
-        // 8. 初始化
+        // 添加活动记录
+        function addActivity(message, captureTime = null) {
+            // 如果之前显示的是"暂无活动记录"，则移除
+            const noActivity = recentActivity.querySelector('.text-muted');
+            if (noActivity && noActivity.textContent === '暂无活动记录') {
+                recentActivity.removeChild(noActivity);
+            }
+
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString();
+
+            const activityItem = document.createElement('div');
+            activityItem.className = 'activity-item mb-2 pb-2 border-bottom';
+            activityItem.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start">
+                    <span class="small">${message}</span>
+                    <span class = 'small'>${captureTime !== null ? '截图时间: ' + formatTime(captureTime) : ''}</span>
+                    <small class="text-muted">${timeStr}</small>
+                </div>
+            `;
+
+            // 限制只显示5条记录
+            if (recentActivity.children.length >= 5) {
+                recentActivity.removeChild(recentActivity.lastChild);
+            }
+
+            recentActivity.insertBefore(activityItem, recentActivity.firstChild);
+        }
+
+        // 初始化
         function init() {
-            // 加载已上传的视频
-            fetch(`/api/project/${projectId}/videos`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success && data.videos) {
-                        data.videos.forEach(video => {
-                            addUploadedVideo(video);
-                        });
-
-                        // 如果有视频，选中第一个
-                        if (uploadedVideos.length > 0) {
-                            selectVideo(uploadedVideos[0].id);
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                });
-
-            // 初始状态更新
             updateAutoCaptureStatus();
-            updateManualStats();
+
+            // 设置视频时长显示的初始值
+            videoPlayer.addEventListener('loadedmetadata', function () {
+                videoDuration.textContent = formatTime(videoPlayer.duration);
+            });
         }
 
         // 定期更新状态

@@ -528,3 +528,6 @@ class CameraCapture:
         except Exception as e:
             print(f"发送SOAP请求时出错: {e}")
             return None
+
+
+camera_capture = CameraCapture()
