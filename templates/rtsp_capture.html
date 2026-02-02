@@ -232,8 +232,9 @@
 
 {% block extra_js %}
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const projectId = ' {{ project.id }}'
+
+    $(function () {
+        const projectId = '{{ project.id }}'
 
         // RTSP截图功能
         const rtspForm = document.getElementById('rtspForm');

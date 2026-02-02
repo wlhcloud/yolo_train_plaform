@@ -95,8 +95,8 @@
                 <i class="fas fa-server"></i> 从服务器解析
             </button>
 
-            <button type="button" class="btn btn-primary" id="uploadLocalBtn" data-bs-toggle="modal"
-                data-bs-target="#uploadModal">
+            <button type="button" class="btn btn-primary" onclick="openUploadLocalModal()" id="uploadLocalBtn" data-bs-toggle="modal"
+                >
                 <i class="fas fa-upload"></i> 上传
             </button>
         </div>
@@ -212,13 +212,9 @@
 </div>
 
 <!-- 上传本地图片弹窗 -->
-<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+<div class="" style="display: none;" id="uploadModal" >
+    <div class="modal-dialog modal-lg" style="padding:20px;">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="uploadModalLabel">上传本地图片</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
             <div class="modal-body">
                 <form id="imageUploadForm" enctype="multipart/form-data">
                     <div class="mb-3">
@@ -232,8 +228,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" id="submitUploadBtn">开始上传</button>
+                <button type="button" class="btn btn-secondary"  onclick="layer.closeAll()">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitUpload()"   style="margin-left:5px;">开始上传</button>
             </div>
         </div>
     </div>
@@ -245,37 +241,42 @@
 <script>
 
     function openResultModal(projectId, materialId) {
-        // 向父页面发送消息：包含项目ID和素材ID
-        window.parent.postMessage({
-            type: 'openResultModal',
-            projectId: projectId,
-            materialId: materialId
-        }, window.location.origin);
+        layer.open({
+            title:"推理结果详情",
+            type: 2, 
+            area: ['80%', '90%'],
+            content: `/api/inference/${projectId}/result/${materialId}` //这里content是一个普通的String
+        });
+    }
+
+    function openUploadLocalModal(){
+        layer.open({
+            title:"上传本地图片",
+            type: 1, 
+            area: ['500px', '350px'],
+            content: $("#uploadModal") //这里content是一个普通的String
+        });
     }
     function openServerFileModal() {
-        window.parent.postMessage({
-            type: 'openServerFileModal',
-            projectId: '{{project.id}}',
-            fileType: 'image'
-        }, window.location.origin);
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        const perPageSelect = document.getElementById('perPageSelect');
-        const fetchFromServer = document.getElementById('fetchFromServerBtn')
-        const submitUpload = document.getElementById('submitUploadBtn')
-        const uploadModal = document.getElementById('uploadModal')
-        // 监听每页显示数量变化
-        perPageSelect.addEventListener('change', function () {
-            const perPage = this.value;
-            const url = new URL(window.location);
-            url.searchParams.set('per_page', perPage);
-            url.searchParams.set('page', 1); // 重置到第一页
-            window.location.href = url.toString();
+const typeInput = document.querySelector("#serverPathForm input[name='type']");
+        typeInput.value = "image";  // 给它赋值
+        layer.open({
+            title:"从服务器解析目录",
+        type: 1, 
+        area: ['400px', '230px'],
+        content: $("#serverPathModal") //这里content是一个普通的String
         });
 
-        // 提交上传按钮事件
-        submitUpload.addEventListener('click', function () {
+        // window.parent.postMessage({
+        //     type: 'openServerFileModal',
+        //     projectId: '{{project.id}}',
+        //     fileType: 'image'
+        // }, window.location.origin);
+    }
+
+
+     // 提交上传按钮事件
+        function submitUpload() {
             const form = document.getElementById('imageUploadForm');
             const formData = new FormData(form);
 
@@ -303,43 +304,26 @@
                 })
                 .finally(() => {
                     this.innerHTML = '<i class="fas fa-upload"></i> 开始上传';
-                    const uploadModal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
-                    uploadModal.hide();
+                    layer.closeAll()
                     this.disabled = false;
                     form.reset();
                 })
+        }
+
+    $(function() {
+        const perPageSelect = document.getElementById('perPageSelect');
+        // 监听每页显示数量变化
+        perPageSelect.addEventListener('change', function () {
+            const perPage = this.value;
+            const url = new URL(window.location);
+            url.searchParams.set('per_page', perPage);
+            url.searchParams.set('page', 1); // 重置到第一页
+            window.location.href = url.toString();
         });
 
-        // 弹窗关闭后重置按钮状态
-        uploadModal.addEventListener('hidden.bs.modal', function () {
-            const submitBtn = document.getElementById('submitUploadBtn');
-            submitBtn.innerHTML = '<i class="fas fa-upload"></i> 开始上传';
-            submitBtn.disabled = false;
-            document.getElementById('imageUploadForm').reset();
-        });
     });
 
 
 
-    // 暴露全局方法，调用父页面配置抽屉
-    function openConfigDrawer(material) {
-        if (window.parent && typeof window.parent.openConfigDrawer === 'function') {
-            window.parent.openConfigDrawer(material);
-        } else {
-            alert('配置功能暂未就绪，请稍后再试');
-        }
-    }
-
-    function deleteMaterial(id) {
-        window.parent.postMessage({
-            type: 'deleteMaterial', data: [id]
-        }, window.location.origin)
-    }
-
-    window.addEventListener('message', function (event) {
-        if (event.data.type === 'refrensh') {
-            location.reload()
-        }
-    });
 </script>
 {% endblock %}

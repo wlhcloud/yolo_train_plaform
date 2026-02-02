@@ -111,10 +111,10 @@
     <div class="col-10">
         <!-- 任务操作按钮组（参考图片管理多选操作按钮） -->
         <div class="task-action-buttons" style="margin-bottom: 1rem;">
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+            <button class="btn btn-primary"  onclick="openTaskModal()">
                 <i class="fas fa-plus"></i> 新增标注任务
             </button>
-            <button class="btn btn-primary" id="submitSelectedTaskBtn" onclick="submitSelectedTask()">
+            <button class="btn btn-primary"  onclick="submitSelectedTask()">
                 <i class="fas fa-upload"></i> 提交
             </button>
         </div>
@@ -279,14 +279,9 @@
 </div>
 
 <!-- 新增/编辑标注任务模态框 -->
-<div class="modal fade" id="addTaskModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="addTaskModalLabel"
-    aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+<div  id="addTaskModal" style="display: none;">
+    <div class="modal-dialog modal-lg"  style="padding:20px;">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="addTaskModalLabel">新增标注任务</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
             <div class="modal-body">
                 <form id="taskForm">
                     <input type="hidden" id="taskId" value="0">
@@ -310,7 +305,7 @@
                             <label class="form-label mb-0">选择待标注素材</label>
                             <div>
                                 <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal"
-                                    data-bs-target="#selectMaterialModal">
+                                    onclick="openMaterialModal()">
                                     <i class="fas fa-plus"></i> 选择标注素材
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-danger"
@@ -345,53 +340,15 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" id="submitTaskBtn" onclick="submitTask()">提交</button>
+                <button type="button" class="btn btn-secondary" onclick="layer.closeAll()">取消</button>
+                <button type="button" class="btn btn-primary"  onclick="submitTask()" style="margin-left:5px;">提交</button>
             </div>
         </div>
     </div>
 </div>
 
-<div class="modal fade" id="selectMaterialModal" data-bs-backdrop="static" tabindex="-1"
-    aria-labelledby="selectMaterialModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="selectMaterialModalLabel">选择标注素材</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <iframe id="materialSelectFrame" src="{{ url_for('main.task_image_list', project_id=project.id) }}"
-                    style="width: 100%; height: 500px; border: none;"></iframe>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-primary" data-bs-toggle="modal" onclick="getIframeSelectedData()"
-                    data-bs-target="#addTaskModal">确定</button>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">关闭</button>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- 标注页面跳转确认弹窗 -->
-<div class="modal fade" id="annotateModal" tabindex="-1" aria-labelledby="annotateModalLabel" data-bs-backdrop="static"
-    aria-hidden="true">
-    <div class="modal-dialog modal-fullscreen">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="annotateModalLabel">标注</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body" style="scrollbar-width: none;">
-                <iframe id="annotateFrame" src=""
-                    style="width: 100%; height: 100%; border: none; scrollbar-width: none;"></iframe>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
-            </div>
-        </div>
-    </div>
-</div>
+
 
 
 <!-- 图片放大预览模态框（默认隐藏） -->
@@ -455,7 +412,7 @@
                 // 填充待标注素材列表
                 buildTaskItemList(task.task_items);
 
-                new bootstrap.Modal(document.getElementById('addTaskModal')).show();
+               openTaskModal();
             })
             .catch(error => {
                 const errorMsg = error.message || '获取任务详情失败，请重试';
@@ -466,6 +423,16 @@
                 });
                 console.error('编辑任务异常：', error);
             });
+    }
+
+
+    function openTaskModal(){
+        layer.open({
+            title:"新增标注任务",
+            type: 1, 
+            area: ['600px', '550px'],
+            content: $("#addTaskModal") //这里content是一个普通的String
+        });
     }
 
     /** 清空所有任务素材项 */
@@ -520,24 +487,38 @@
             });
     }
 
+
+    function openTaskModal(){
+        layer.open({
+            title:"新增标注任务",
+            type: 1, 
+            area: ['600px', '550px'],
+            content: $("#addTaskModal") //这里content是一个普通的String
+        });
+    }
     /** 打开标注页面模态框 */
     function openAnnotateModal(taskId) {
         currentTaskId = taskId;
 
-        // 获取iframe元素
-        const annotateFrame = document.getElementById('annotateFrame');
-        // 设置iframe的src属性为标注页面的URL
-        annotateFrame.src = `/api/task-annotation/${projectId}/image/${currentTaskId}`;
+        // // 获取iframe元素
+        // const annotateFrame = document.getElementById('annotateFrame');
+        // // 设置iframe的src属性为标注页面的URL
+        // annotateFrame.src = `/api/task-annotation/${projectId}/image/${currentTaskId}`;
+        // const annotateModalEL = document.getElementById('annotateModal');
+        // const annotateModal = new bootstrap.Modal(annotateModalEL);
+        // annotateModalEL.addEventListener('shown.bs.modal', () => {
+        //     annotateFrame.contentWindow.postMessage('annotateModalShown', window.location.origin);
+        // });
+        // annotateFrame.onload = function () {
+        //     annotateModal.show();
+        // };
 
-        const annotateModalEL = document.getElementById('annotateModal');
-        const annotateModal = new bootstrap.Modal(annotateModalEL);
-
-        annotateModalEL.addEventListener('shown.bs.modal', () => {
-            annotateFrame.contentWindow.postMessage('annotateModalShown', window.location.origin);
+        layer.open({
+            title:"标注",
+            type: 2, 
+            area: ['90%', '90%'],
+            content: `/api/task-annotation/${projectId}/image/${currentTaskId}` //这里content是一个普通的String
         });
-        annotateFrame.onload = function () {
-            annotateModal.show();
-        };
     }
 
     /** 关闭标注页面模态框 */
@@ -761,34 +742,11 @@
             taskAnnotateItemList.appendChild(row);
             index += 1;
         });
+        
+            layer.close(annotation_index___);
     }
 
-    /**
-     * 监听页面的请求消息，被动返回数据
-     */
-    window.addEventListener('message', function (event) {
 
-        // 验证消息类型（避免接收无关消息）
-        if (event.data.type === 'iframeSelectedImageData') {
-            const images = event.data.data;
-            if (images && images.length > 0) {
-                buildTaskItemList(images);
-            }
-        }
-    });
-
-    /**
-     * 从 选择素材中获取选中数据
-     */
-    function getIframeSelectedData() {
-        const imageIframe = document.getElementById('materialSelectFrame');
-        if (imageIframe.contentWindow) {
-            imageIframe.contentWindow.postMessage(
-                { type: 'requestSelectedData' },
-                window.location.origin
-            );
-        }
-    }
 
     /** 提交选中任务 */
     function submitSelectedTask() {
@@ -865,16 +823,19 @@
             window.location.reload();
         }
     }
-
+var annotation_index___ ;
     /** 打开选择素材模态框 */
-    function openMaterialModal(e) {
-        console.log('打开选择素材模态框');
-        e.preventDefault(); // 关键：阻止默认事件传播
-        e.stopPropagation(); // 阻止事件向上冒泡
+    function openMaterialModal() {
+       annotation_index___ =  layer.open({
+            title:"选择标注素材",
+            type: 2, 
+            area: ['90%', '90%'],
+            content: `/api/task-annotation/${projectId}/image-list` //这里content是一个普通的String
+        });
 
-        const selectMaterialModal = document.getElementById('selectMaterialModal');
-        new bootstrap.Modal(selectMaterialModal).show();
-        selectMaterialModal.style.zIndex = 1060; // 外层弹框默认zIndex=1050，新弹框设为1060即可
+        // const selectMaterialModal = document.getElementById('selectMaterialModal');
+        // new bootstrap.Modal(selectMaterialModal).show();
+        // selectMaterialModal.style.zIndex = 1060; // 外层弹框默认zIndex=1050，新弹框设为1060即可
     }
     /** 每页显示数量变化处理 */
     function taskPageChange(e) {
@@ -890,16 +851,10 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         // 监听模态框关闭事件，刷新页面
-        const taskModal = document.getElementById('addTaskModal');
-        const annotateModal = document.getElementById('annotateModal');
-        const selectMaterialModal = document.getElementById('selectMaterialModal');
         const taskPerPageSelect = document.getElementById('taskPerPageSelect');
 
 
         taskPerPageSelect.addEventListener('change', taskPageChange);
-        taskModal.addEventListener('hidden.bs.modal', closeTaskModal)
-        annotateModal.addEventListener('hidden.bs.modal', closeAnnotateModal)
-        selectMaterialModal.addEventListener('show.bs.modal', openMaterialModal);
     });
 </script>
 {% endblock %}

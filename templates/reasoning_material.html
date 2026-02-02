@@ -238,7 +238,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 100%;">
+<div class="container" style="max-width: 100%;" ms-controller="main_bs_controller">
     <div class="row">
         {% set current_nav_key = 'material'%}
         {% include "project_nav.html"%}
@@ -250,43 +250,43 @@
                         <!-- 图片推理：支持上传+服务器解析 -->
                         <a class="nav-link active" id="infer-image-tab" aria-current="page" onclick="inferenceTab(this)"
                             data-iframe-url="{{ url_for('main.infer_image_material', project_id=project.id) if project else '' }}">
-                            <i class="fas fa-file-image"></i> 图片推理
+                            <i class="fas fa-file-image"></i> 图片推理素材
                         </a>
                     </li>
                     <li class="nav-item">
                         <!-- 视频推理：支持上传+服务器解析 -->
                         <a class="nav-link" id="infer-video-tab" onclick="inferenceTab(this)"
                             data-iframe-url="{{ url_for('main.infer_video_material', project_id=project.id) if project else '' }}">
-                            <i class="fas fa-file-video"></i> 视频推理
+                            <i class="fas fa-file-video"></i> 视频推理素材
                         </a>
                     </li>
                     <li class="nav-item">
                         <!-- RTSP推理：支持添加地址，长期推理提示 -->
                         <a class="nav-link" id="infer-rtsp-tab" onclick="inferenceTab(this)"
                             data-iframe-url="{{ url_for('main.infer_rtsp_material', project_id=project.id) if project else '' }}">
-                            <i class="fas fa-stream"></i> RTSP推理
+                            <i class="fas fa-stream"></i> RTSP推理素材
                         </a>
                     </li>
                 </ul>
 
                 <!-- Iframe容器：承载三种推理素材的具体页面，与图片管理页面样式一致 -->
-                <div id="iframeContainer" style="width: 100%;height: 550px;">
-                    <!-- 初始化内容由JS加载 -->
+                <div id="iframeContainer" 
+                        ms-include-src="PageCodeRdm" data-include-rendered='Temprender'
+                    style="width: 100%;
+    padding-top: 10px;
+    margin-top: -2px;
+    border: 1px solid #eee;
+    border-radius: 0px;
+    border-top: 0px;">
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="modal fade material-config-modal" id="materialConfigModal" tabindex="-1"
+    <div class="" style="display: none;" id="materialConfigModal" tabindex="-1"
         aria-labelledby="materialConfigModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="materialConfigModalLabel">
-                        <i class="fas fa-cog me-1"></i> 素材配置与区域框选
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
                 <div class="modal-body" id="materialConfigContainer">
                     <iframe id="materialConfigFrame" src="material_config.html"
                         style="width: 100%; height: 500px; border: none;"></iframe>
@@ -304,13 +304,9 @@
 
 </div>
 <!-- 结果弹窗：包含加载推理结果的iframe -->
-<div class="modal fade" id="resultModal" tabindex="-1" aria-hidden="true">
+<div class="" style="display: none;" id="resultModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">推理结果详情</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
             <div class="modal-body" style="height: 70vh; overflow: hidden;">
                 <!-- 弹窗iframe：加载你的result接口模板页面 -->
                 <iframe id="resultIframe" width="100%" height="100%" frameborder="0"></iframe>
@@ -320,15 +316,14 @@
 </div>
 
 <!--服务器解析弹框-->
-<div class="modal fade" id="serverPathModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+<div class="" style="display: none;" id="serverPathModal" tabindex="-1">
+    <div class="modal-dialog modal-lg" style="padding:10px;">
         <div class="modal-content">
             <form id="serverPathForm">
                 <input type="text" class="form-control" hidden name="type">
 
                 <div class="modal-header">
-                    <h5 class="modal-title">从服务器解析目录</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title"></h5>
                 </div>
 
                 <div class="modal-body">
@@ -347,10 +342,10 @@
                 </div>
 
                 <div class="modal-footer">
-                    <button type="button" onclick="analysisServerFile()" class="btn btn-primary">解析</button>
-                    <button type="button" id="saveSelectedBtn" onclick="saveServerFiles()"
+                    <button type="button" onclick="analysisServerFile()" class="btn btn-primary" style="margin-left:5px;">解析</button>
+                    <button type="button" id="saveSelectedBtn" style="margin-left:5px;" onclick="saveServerFiles()"
                         class="btn btn-success">保存</button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-secondary" style="margin-left:5px;" onclick="layer.closeAll()">关闭</button>
                 </div>
 
             </form>
@@ -361,7 +356,27 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="/static/js/avalon/avalon1.4.js"></script>
 <script>
+
+    var model = avalon.define({
+		$id: "main_bs_controller",
+        PageCode: "/static/js/avalon/Loading", //需要加载的模板
+		PageCodeRdm: "/static/js/avalon/Loading.html", //需要加载的模板
+		rdm: Math.random(), //随机数
+		Temprender: function() {
+			
+		} //组件加载完成事件
+        });
+	avalon.ready(function() {
+        const infertabid=  localStorage.getItem("infertabid");
+		// 触发默认Tab的切换逻辑
+        const defaultTab = document.getElementById(infertabid||"infer-image-tab");
+        if (defaultTab) {
+            inferenceTab(defaultTab);
+        }
+	});
+
     // 全局变量：记录当前推理状态、框选相关参数、当前素材信息
     let isInferring = false;
     let startX = 0, startY = 0, isSelecting = false;
@@ -370,14 +385,7 @@
     const selectionBox = document.getElementById('selectionBox');
     const imagePreviewContainer = document.getElementById('imagePreviewContainer');
 
-    // 页面加载完成后，初始化默认Tab与事件绑定
-    document.addEventListener('DOMContentLoaded', function () {
-        const defaultTab = document.getElementById('infer-image-tab');
-        const saveSelectedBtn = document.getElementById('saveSelectedBtn')
-        if (defaultTab) {
-            inferenceTab(defaultTab);
-        }
-    });
+    
 
 
     function saveServerFiles() {
@@ -386,7 +394,7 @@
             .forEach(cb => selected.push(cb.value));
 
         if (selected.length === 0) {
-            layer.msg('请选择文件');
+            layer.msg('请输入文件路径');
             return;
         }
 
@@ -403,8 +411,7 @@
                 if (res.success) {
                     layer.msg('保存成功！');
                     // 可选择关闭 Modal 或刷新列表
-                    const modal = bootstrap.Modal.getInstance(document.getElementById('serverPathModal'));
-                    modal.hide();
+                    layer.closeAll();
                 } else {
                     layer.msg('保存失败！');
                 }
@@ -417,9 +424,10 @@
 
     // 解析服务器文件
     function analysisServerFile() {
+        const typeInput = document.querySelector("#serverPathForm input[name='type']");
         const form = document.getElementById('serverPathForm');
         const formData = new FormData(form);
-        formData.append('type', 'image')
+        formData.append('type', typeInput.value)
 
         fetch('{{ url_for("main.parse_server_dir") }}', {
             method: 'POST',
@@ -478,7 +486,7 @@
      */
     function openConfigDrawer(material) {
         if (!material || !material.id || !material.path || !material.filename) {
-            alert('无效的素材信息，无法打开配置弹窗');
+            layer.msg('无效的素材信息，无法打开配置弹窗');
             return;
         }
 
@@ -491,20 +499,12 @@
         const imageSrc = staticBaseUrl + `${material.path}`; // 或使用后端提供的素材访问接口
 
         // 获取iframe元素
-        const materialConfigFrame = document.getElementById('materialConfigFrame');
-        materialConfigFrame.src = `/api/material/${projectId}/config/${material.id}`;
-
-        const materialConfigModalEL = document.getElementById('materialConfigModal');
-        const annotateModal = new bootstrap.Modal(materialConfigModalEL);
-
-        materialConfigModal.addEventListener('shown.bs.modal', () => {
-            materialConfigFrame.contentWindow.postMessage({ type: 'load' }, window.location.origin);
+        layer.open({
+                title:"素材配置与区域框选",
+                type: 2, 
+                area: ['90%', '90%'],
+                content: `/api/material/${projectId}/config/${material.id}` //这里content是一个普通的String
         });
-
-        materialConfigFrame.onload = function () {
-            const modal = new bootstrap.Modal(materialConfigModalEL);
-            modal.show();
-        };
     }
 
     /**
@@ -524,38 +524,39 @@
         // 给当前点击的Tab添加active高亮状态
         tabLink.classList.add('active');
         tabLink.setAttribute('aria-current', 'page');
-
+        localStorage.setItem("infertabid",tabLink.getAttribute("id"));
         const iframeUrl = tabLink.dataset.iframeUrl;
         const iframeContainer = document.getElementById('iframeContainer');
+        model.PageCodeRdm = iframeUrl;
 
-        if (!iframeUrl || iframeUrl === '#') {
-            iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #999;">暂无可用内容</div>';
-            return;
-        }
+        // if (!iframeUrl || iframeUrl === '#') {
+        //     iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #999;">暂无可用内容</div>';
+        //     return;
+        // }
 
-        let iframe = iframeContainer.querySelector('iframe');
-        if (iframe) {
-            iframe.src = iframeUrl;
-        } else {
-            // 动态创建新iframe并插入容器，保持与图片管理页面一致的配置
-            iframe = document.createElement('iframe');
-            iframe.id = 'materialIframe'
-            iframe.src = iframeUrl;
-            iframe.width = '100%';
-            iframe.height = '100%';
-            iframe.frameBorder = '0';
-            iframe.allowFullscreen = true;
+        // let iframe = iframeContainer.querySelector('iframe');
+        // if (iframe) {
+        //     iframe.src = iframeUrl;
+        // } else {
+        //     // 动态创建新iframe并插入容器，保持与图片管理页面一致的配置
+        //     iframe = document.createElement('iframe');
+        //     iframe.id = 'materialIframe'
+        //     iframe.src = iframeUrl;
+        //     iframe.width = '100%';
+        //     iframe.height = '100%';
+        //     iframe.frameBorder = '0';
+        //     iframe.allowFullscreen = true;
 
-            iframe.onload = function () {
-                console.log(`[${tabLink.innerText}] 推理素材页面加载完成`);
-            };
-            iframe.onerror = function () {
-                iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #f56c6c;">内容加载失败，请重试</div>';
-            };
+        //     iframe.onload = function () {
+        //         console.log(`[${tabLink.innerText}] 推理素材页面加载完成`);
+        //     };
+        //     iframe.onerror = function () {
+        //         iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #f56c6c;">内容加载失败，请重试</div>';
+        //     };
 
-            iframeContainer.innerHTML = '';
-            iframeContainer.appendChild(iframe);
-        }
+        //     iframeContainer.innerHTML = '';
+        //     iframeContainer.appendChild(iframe);
+        // }
     }
 
     /**
@@ -635,46 +636,41 @@
     }
 
     function closeMaterialConfigModal() {
-        const materialConfigModalEL = document.getElementById('materialConfigModal');
-        // 关闭模态框
-        const modal = bootstrap.Modal.getInstance(materialConfigModalEL);
-        if (modal) {
-            modal.hide();
-        }
+        layer.closeAll();
     }
 
     // 监听Iframe发送的消息
-    window.addEventListener('message', function (event) {
-        if (!window.ALLOWED_ORIGINS.includes(event.origin)) return;
+    // window.addEventListener('message', function (event) {
+    //     if (!window.ALLOWED_ORIGINS.includes(event.origin)) return;
 
-        if (event.data.type === 'deleteMaterial') {
-            const ids = event.data.data;
-            deleteMaterial(ids);
-        }
-        if (event.data.type === 'close') {
-            closeMaterialConfigModal();
-        }
-        if (event.data.type === 'openResultModal') {
-            const { projectId, materialId } = event.data;
-            // 1. 设置弹窗iframe的src为你的结果接口
-            const resultIframe = document.getElementById('resultIframe');
-            resultIframe.src = `/api/inference/${projectId}/result/${materialId}`;
+    //     if (event.data.type === 'deleteMaterial') {
+    //         const ids = event.data.data;
+    //         deleteMaterial(ids);
+    //     }
+    //     if (event.data.type === 'close') {
+    //         closeMaterialConfigModal();
+    //     }
+    //     if (event.data.type === 'openResultModal') {
+    //         const { projectId, materialId } = event.data;
+    //         // 1. 设置弹窗iframe的src为你的结果接口
+    //         const resultIframe = document.getElementById('resultIframe');
+    //         resultIframe.src = `/api/inference/${projectId}/result/${materialId}`;
 
-            // 2. 打开弹窗
-            const modal = new bootstrap.Modal(document.getElementById('resultModal'));
-            modal.show();
-        }
-        if (event.data.type === 'openServerFileModal') {
-            const { projectId, fileType } = event.data;
-            console.log(projectId, fileType)
-            // 打开弹窗
-            const modal = new bootstrap.Modal(document.getElementById('serverPathModal'));
-            modal.show();
+    //         // 2. 打开弹窗
+    //         const modal = new bootstrap.Modal(document.getElementById('resultModal'));
+    //         modal.show();
+    //     }
+    //     if (event.data.type === 'openServerFileModal') {
+    //         const { projectId, fileType } = event.data;
+    //         console.log(projectId, fileType)
+    //         // 打开弹窗
+    //         const modal = new bootstrap.Modal(document.getElementById('serverPathModal'));
+    //         modal.show();
 
-            const typeInput = document.querySelector("#serverPathForm input[name='type']");
-            typeInput.value = fileType;  // 给它赋值
+    //         const typeInput = document.querySelector("#serverPathForm input[name='type']");
+    //         typeInput.value = fileType;  // 给它赋值
 
-        }
-    });
+    //     }
+    // });
 </script>
 {% endblock %}

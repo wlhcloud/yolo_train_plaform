@@ -257,7 +257,10 @@ def delete_project(project_id):
 @main.route("/project/<int:project_id>/images")
 def project_images(project_id):
     project = Project.query.get_or_404(project_id)
-    return render_template("images.html", project=project)
+    # 获取分页参数
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 10, type=int)
+    return render_template("images.html",page=page, per_page=per_page, project=project)
 
 
 # 视频截图页面
@@ -309,6 +312,7 @@ def images_upload(project_id):
     return render_template(
         "images_upload.html",
         project=project,
+        page=page, per_page=per_page,
         images=images_pagination,
         imgs_count=imgs_count,
         label_count=result
@@ -353,7 +357,7 @@ def delete_image(project_id, image_id):
         db.session.rollback()
         flash(f"删除图片时出错: {str(e)}", "error")
 
-    return redirect(url_for("main.images_upload", project_id=project_id))
+    return redirect(url_for("main.project_images", project_id=project_id))
 
 
 @main.route("/project/<int:project_id>/upload_images", methods=["POST"])
@@ -402,7 +406,7 @@ def upload_images(project_id):
 
             db.session.commit()
             flash("ZIP文件上传并解压成功", "success")
-            return redirect(url_for("main.images_upload", project_id=project_id))
+            return redirect(url_for("main.project_images", project_id=project_id))
 
     # 处理单个或多个图片上传
     if "images" in request.files:
@@ -435,7 +439,7 @@ def upload_images(project_id):
         db.session.commit()
         flash("图片上传成功", "success")
 
-    return redirect(url_for("main.images_upload", project_id=project_id))
+    return redirect(url_for("main.project_images", project_id=project_id))
 
 
 @main.route("/project/<int:project_id>/delete_selected_images", methods=["POST"])
@@ -467,7 +471,7 @@ def delete_selected_images(project_id):
     except Exception as e:
         flash(f"批量删除图片时出错: {str(e)}", "error")
 
-    return redirect(url_for("main.images_upload", project_id=project_id))
+    return redirect(url_for("main.project_images", project_id=project_id))
 
 
 @main.route("/project/<int:project_id>/delete_unannotated_images", methods=["POST"])
@@ -493,7 +497,7 @@ def delete_unannotated_images(project_id):
     except Exception as e:
         flash(f"删除未标注图片时出错: {str(e)}", "error")
 
-    return redirect(url_for("main.images_upload", project_id=project_id))
+    return redirect(url_for("main.project_images", project_id=project_id))
 
 
 # 标注功能

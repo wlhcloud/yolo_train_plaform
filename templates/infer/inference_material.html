@@ -125,7 +125,7 @@
                             查看
                         </button>
                         <button class="btn btn-sm btn-outline-primary"
-                            onclick="startMaterialInference('{{ project.id }}', '{{ m.id }}')">
+                            onclick="startInference('{{ project.id }}', '{{ m.id }}')">
                             重新推理
                         </button>
                         {% endif %}
@@ -208,40 +208,6 @@
 
 <script>
 
-    function stopInference(projectId, materialId) {
-        // 向父页面发送消息：包含项目ID和素材ID
-        window.parent.postMessage({
-            type: 'stopInference',
-            projectId: projectId,
-            materialId: materialId
-        }, window.location.origin);
-    }
-    function openResultModal(projectId, materialId) {
-        // 向父页面发送消息：包含项目ID和素材ID
-        window.parent.postMessage({
-            type: 'openResultModal',
-            projectId: projectId,
-            materialId: materialId
-        }, window.location.origin);
-    }
-    function startMaterialInference(projectId, materialId) {
-        window.parent.postMessage({
-            type: 'startInference',
-            materialId: materialId
-        }, window.location.origin);
-    }
-    document.addEventListener('DOMContentLoaded', function () {
-        const perPageSelect = document.getElementById('perPageSelect');
-    });
-
-
-    window.addEventListener('message', function (event) {
-        console.log('接收到消息：', event.origin, event.data)
-        // if (!window.ALLOWED_ORIGINS.includes(event.origin)) return;
-        if (event.data.type === 'refrensh') {
-            window.location.reload()
-        }
-    });
 </script>
 
 {% endblock %}

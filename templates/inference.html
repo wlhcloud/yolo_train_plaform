@@ -32,7 +32,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 100%;">
+<div class="container" style="max-width: 100%;" ms-controller="main_bs_controller">
     <div class="row">
         {% set current_nav_key = 'inference'%}
         {% include "project_nav.html"%}
@@ -135,7 +135,7 @@
                                 推理结果分类配置
                             </div>
                             <button class="btn btn-sm btn-primary" data-bs-toggle="modal"
-                                data-bs-target="#addLabelModal">
+                                onclick="addLabelModal()">
                                 <i class="fas fa-plus"></i> 新增
                             </button>
                         </div>
@@ -185,7 +185,7 @@
                                 推理结果
                             </div>
                             <div>
-                                <button class="btn btn-sm btn-primary" onclick="startInference(null)"
+                                <button class="btn btn-sm btn-primary" onclick="startInference('{{ project.id }}',null)"
                                     id="startInferenceBtn">
                                     <i class="fas fa-plus"></i> 开始推理
                                 </button>
@@ -199,11 +199,15 @@
                             </div>
                         </div>
 
-                        <div class="card-body">
-                            <iframe id="inferenceMaterialIframe"
-                                src="{{ url_for('main.api_inference_material_page', project_id=project.id) }}"
-                                style="width: 100%; height: 500px; border: none;">
-                            </iframe>
+                        <div class="card-body"  
+                        id="inferenceMaterialIframe"
+                        ms-include-src="PageCodeRdm" data-include-rendered='Temprender'
+                    style="width: 100%;
+    padding-top: 10px;
+    margin-top: -2px;
+    border: 1px solid #eee;
+    border-radius: 0px;
+    border-top: 0px;">
                         </div>
                     </div>
                 </div>
@@ -212,14 +216,9 @@
     </div>
 </div>
 
-<div class="modal fade" id="addLabelModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-al modal-dialog-centered">
+<div style="display: none;" id="addLabelModal" >
+    <div class="modal-dialog modal-al modal-dialog-centered" style="padding:20px;">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">新增标签映射</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-
             <div class="modal-body">
                 <div class="row">
                     <div class="col-md-6">
@@ -251,10 +250,10 @@
             </div>
 
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <button type="button" class="btn btn-secondary" onclick="layer.closeAll()">
                     取消
                 </button>
-                <button type="button" class="btn btn-primary" id='addLabelBtn'>
+                <button type="button" class="btn btn-primary" onclick='addLabelBtn()' style="margin-left:5px;">
                     确定
                 </button>
             </div>
@@ -263,46 +262,65 @@
 </div>
 
 
-<!-- 结果弹窗：包含加载推理结果的iframe -->
-<div class="modal fade" id="resultModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">推理结果详情</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body" style="height: 70vh; overflow: hidden;">
-                <!-- 弹窗iframe：加载你的result接口模板页面 -->
-                <iframe id="resultIframe" width="100%" height="100%" frameborder="0"></iframe>
-            </div>
-        </div>
-    </div>
-</div>
+
 {% endblock %}
 
 {% block extra_js %}
+
+<script src="/static/js/avalon/avalon1.4.js"></script>
 <script>
+
+    var model = avalon.define({
+		$id: "main_bs_controller",
+        PageCode: "/static/js/avalon/Loading", //需要加载的模板
+		PageCodeRdm: "{{ url_for('main.api_inference_material_page', project_id=project.id) }}", //需要加载的模板
+		rdm: Math.random(), //随机数
+		Temprender: function() {
+			
+		} //组件加载完成事件
+        });
+	avalon.ready(function() {
+	});
+
+    function addLabelModal(){
+        layer.open({
+            title:"上传本地图片",
+            type: 1, 
+            area: ['500px', '350px'],
+            content: $("#addLabelModal") //这里content是一个普通的String
+        });
+    }
+    
+    function openResultModal(projectId, materialId){
+        layer.open({
+            title:"推理结果详情",
+            type: 2, 
+            area: ['80%', '90%'],
+            content: `/api/inference/${projectId}/result/${materialId}` //这里content是一个普通的String
+        });
+    }
+
     window.addEventListener('message', function (event) {
         console.log('接收到消息：', event.origin, event.data)
         if (!window.ALLOWED_ORIGINS.includes(event.origin)) return;
 
-        if (event.data.type === 'openResultModal') {
-            const { projectId, materialId } = event.data;
-            const resultIframe = document.getElementById('resultIframe');
-            resultIframe.src = `/api/inference/${projectId}/result/${materialId}`;
+        // if (event.data.type === 'openResultModal') {
+        //     const { projectId, materialId } = event.data;
+        //     const resultIframe = document.getElementById('resultIframe');
+        //     resultIframe.src = `/api/inference/${projectId}/result/${materialId}`;
 
-            const modal = new bootstrap.Modal(document.getElementById('resultModal'));
-            modal.show();
-        }
-        if (event.data.type === "startInference") {
-            const { materialId } = event.data;
-            startInference(materialId)
-        }
+        //     const modal = new bootstrap.Modal(document.getElementById('resultModal'));
+        //     modal.show();
+        // }
+        // if (event.data.type === "startInference") {
+        //     const { materialId } = event.data;
+        //     startInference(materialId)
+        // }
 
-        if (event.data.type === 'stopInference') {
-            const { projectId, materialId } = event.data;
-            stopInference(projectId, materialId)
-        }
+        // if (event.data.type === 'stopInference') {
+        //     const { projectId, materialId } = event.data;
+        //     stopInference(projectId, materialId)
+        // }
     });
 
     function stopInference(projectId, materialId) {
@@ -330,7 +348,7 @@
                     if (response.success) {
                         layer.msg('停止推理成功！')
 
-                        sendMaterialMessage('refrensh')
+                        // sendMaterialMessage('refrensh')
                     } else {
                         layer.msg(response.message);
                     }
@@ -340,15 +358,15 @@
         })
     }
 
-    function sendMaterialMessage(type, data = null) {
-        const inferenceMaterialIframe = document.getElementById('inferenceMaterialIframe');
-        if (inferenceMaterialIframe && inferenceMaterialIframe.contentWindow) {
-            inferenceMaterialIframe.contentWindow.postMessage(
-                { type: type, data: data },
-                window.location.origin
-            );
-        }
-    }
+    // function sendMaterialMessage(type, data = null) {
+    //     const inferenceMaterialIframe = document.getElementById('inferenceMaterialIframe');
+    //     if (inferenceMaterialIframe && inferenceMaterialIframe.contentWindow) {
+    //         inferenceMaterialIframe.contentWindow.postMessage(
+    //             { type: type, data: data },
+    //             window.location.origin
+    //         );
+    //     }
+    // }
 
     function exportZip() {
         window.location.href = "/api/project/{{project.id}}/export_zip";
@@ -396,8 +414,11 @@
             }
         }
 
+        setInterval(() => getInferenceStatus(), 5000)
+    }
 
-        document.getElementById('addLabelBtn').addEventListener('click', function () {
+
+    function addLabelBtn() {
             const origin = document.querySelector(
                 'input[name="originLabel"]:checked'
             )
@@ -432,7 +453,7 @@
         <td>${originName}</td>
         <td>${target}</td>
         <td class="text-center">
-            <button class="btn btn-sm btn-danger" onclick="removeTaskItem(this.${originId})">
+            <button class="btn btn-sm btn-danger" onclick="removeLabel(this,${originId})">
                 <i class="fas fa-trash"></i>移除
             </button>
         </td>
@@ -475,10 +496,8 @@
                 noneMsgTr.style.display = 'none';
             }
 
-            bootstrap.Modal.getInstance(
-                document.getElementById("addLabelModal")
-            ).hide();
-        })
+            layer.closeAll();
+        }
 
         // 定时查询项目推理状态
         function getInferenceStatus() {
@@ -520,10 +539,7 @@
                 });
         }
 
-        setInterval(() => getInferenceStatus(), 5000)
-    }
-
-    function startInference(materialId) {
+    function startInference(projectId, materialId) {
         const modelType = document.querySelector('input[name="modelType"]:checked').value;
         const systemModelSelect = document.getElementById('systemModelSelect');
         const modelFileInput = document.getElementById('modelFile');
@@ -532,22 +548,22 @@
 
         // 验证输入
         if (modelType === 'system' && !systemModelSelect.value) {
-            alert('请选择系统模型');
+            layer.msg('请选择系统模型');
             return;
         }
 
         if (modelType === 'upload' && !modelFileInput.files.length) {
-            alert('请上传模型文件');
+            layer.msg('请上传模型文件');
             return;
         }
 
         if (modelType === 'uploaded' && !uploadedModelSelect.value) {
-            alert('请选择已上传模型');
+            layer.msg('请选择已上传模型');
             return;
         }
 
         if (modelType === 'existing' && !existingModelSelect.value) {
-            alert('请选择已存在模型');
+            layer.msg('请选择已存在模型');
             return;
         }
 
@@ -577,7 +593,7 @@
             .then(response => {
                 if (response.success) {
                     layer.msg('开始推理成功！')
-                    sendMaterialMessage('refrensh')
+                    // sendMaterialMessage('refrensh')
                 } else {
                     layer.msg(response.message);
                 }
@@ -614,11 +630,10 @@
 
 
     // 页面加载完成后初始化
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeInferencePage);
-    } else {
+    $(function(){
         initializeInferencePage();
-    }
+    });
+        
 
 </script>
 {% endblock %}

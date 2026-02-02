@@ -34,62 +34,11 @@
 {% endblock %}
 
 {% block content %}
-<nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">项目列表</a></li>
-        <li class="breadcrumb-item"><a href="{{ url_for('main.project_detail', project_id=project.id) }}">{{
-                project.name }}</a></li>
-        <li class="breadcrumb-item active" aria-current="page">图片标注</li>
-    </ol>
-</nav>
+{% set current_nav_key = 'annotate'%}
+<div class="row">
+{% include "project_nav.html"%}
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1>AI模型训练平台 - 图片标注</h1>
-</div>
-
-<ul class="nav nav-tabs mb-4">
-    <li class="nav-item">
-        <a class="nav-link" href="{{ url_for('main.project_detail', project_id=project.id) }}">
-            <i class="fas fa-tachometer-alt"></i> 项目概览
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link" href="{{ url_for('main.project_images', project_id=project.id) }}">
-            <i class="fas fa-images"></i> 图片管理
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link active" href="{{ url_for('main.annotate', project_id=project.id) }}">
-            <i class="fas fa-tags"></i> 图片标注
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link" href="{{ url_for('main.project_dataset', project_id=project.id) }}">
-            <i class="fas fa-database"></i> 数据集管理
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link" href="{{ url_for('main.project_train', project_id=project.id) }}">
-            <i class="fas fa-robot"></i> 模型训练
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link" href="{{ url_for('main.project_export', project_id=project.id) }}">
-            <i class="fas fa-file-export"></i> 模型导出
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link" href="{{ url_for('main.model_inference', project_id=project.id) }}">
-            <i class="fas fa-magic"></i> 模型推理
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link active" href="{{ url_for('main.inference_material', project_id=project.id) }}">
-            <i class="fas fa-layer-group"></i> 推理素材管理
-        </a>
-    </li>
-</ul>
-
+<div class="col-10" >
 <div class="d-flex justify-content-between mb-3">
     <div>
         {% if images|length > 1 %}
@@ -207,7 +156,8 @@
         </div>
     </div>
 </div>
-
+</div>
+</div>
 <!-- 添加标签模态框 -->
 <div class="modal fade" id="addLabelModal" tabindex="-1">
     <div class="modal-dialog">
@@ -263,7 +213,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+<script src="/static/js/fabric.min.js"></script>
 <script>
     // 全局变量
     let canvas;

@@ -103,8 +103,8 @@
                 <option value="50" {% if pagination.per_page==50 %}selected{% endif %}>50</option>
                 <option value="100" {% if pagination.per_page==100 %}selected{% endif %}>100</option>
             </select>
-            <button type="button" class="btn btn-primary" id="addRtspBtn" data-bs-toggle="modal"
-                data-bs-target="#addRtspModal">
+            <button type="button" class="btn btn-primary" onclick="addRtspBtn()" 
+                >
                 <i class="fas fa-plus"></i> 添加
             </button>
         </div>
@@ -224,13 +224,9 @@
 </div>
 
 <!-- 添加RTSP地址弹窗 -->
-<div class="modal fade" id="addRtspModal" tabindex="-1" aria-labelledby="addRtspModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+<div  id="addRtspModal" style="display: none;" >
+    <div class="modal-dialog modal-lg"  style="padding:20px;">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="addRtspModalLabel">添加RTSP网络流地址</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
             <div class="modal-body">
                 <form id="rtspAddForm">
                     <div class="mb-3">
@@ -258,17 +254,14 @@
                             </div>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <button type="button" class="btn btn-outline-secondary" id="checkRtspBtn">
-                            <i class="fas fa-check"></i> 校验地址有效性
-                        </button>
-                        <span id="rtspCheckResult" class="ms-2"></span>
-                    </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" id="submitRtspBtn">确认添加</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="checkRtspBtn()" >
+                            <i class="fas fa-check"></i> 校验地址有效性
+                        </button>
+                <button type="button" class="btn btn-secondary" style="margin-left:5px;" onclick="layer.closeAll()">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitUpload()" style="margin-left:5px;">确认添加</button>
             </div>
         </div>
     </div>
@@ -277,28 +270,28 @@
 
 {% block extra_js %}
 <script>
-    function deleteMaterial(id) {
-        window.parent.postMessage({
-            type: 'deleteMaterial', data: [id]
-        }, window.location.origin)
-    }
-    function openResultModal(projectId, materialId) {
-        // 向父页面发送消息：包含项目ID和素材ID
-        window.parent.postMessage({
-            type: 'openResultModal',
-            projectId: projectId,
-            materialId: materialId
-        }, window.location.origin);
+$(function () {
+        const perPageSelect = document.getElementById('perPageSelect');
+        // 监听每页显示数量变化
+        perPageSelect.addEventListener('change', function () {
+            const perPage = this.value;
+            const url = new URL(window.location);
+            url.searchParams.set('per_page', perPage);
+            url.searchParams.set('page', 1); // 重置到第一页
+            window.location.href = url.toString();
+        });
+        
+    });
+    function addRtspBtn(){
+        layer.open({
+            title:"添加RTSP网络流地址",
+            type: 1, 
+            area: ['600px', '500px'],
+            content: $("#addRtspModal") //这里content是一个普通的String
+        });
     }
 
-    window.addEventListener('message', function (event) {
-        if (event.data.type === 'refrensh') {
-            location.reload()
-        }
-    });
-    document.addEventListener('DOMContentLoaded', function () {
-        // 校验RTSP地址有效性
-        document.getElementById('checkRtspBtn').addEventListener('click', function () {
+    function checkRtspBtn() {
             const rtspUrl = document.getElementById('rtspUrl').value.trim();
             if (!rtspUrl) {
                 document.getElementById('rtspCheckResult').innerHTML = '<span class="text-danger">请输入有效的RTSP地址</span>';
@@ -319,15 +312,16 @@
                 this.innerHTML = '<i class="fas fa-check"></i> 校验地址有效性';
                 this.disabled = false;
             }, 2000);
-        });
+        }
 
-        // 提交添加RTSP地址
-        document.getElementById('submitRtspBtn').addEventListener('click', function () {
+
+    // 提交添加RTSP地址
+        function submitUpload() {
             const rtspName = document.getElementById('rtspName').value.trim();
             const rtspUrl = document.getElementById('rtspUrl').value.trim();
 
             if (!rtspName || !rtspUrl) {
-                alert('请填写流名称和RTSP地址');
+                layer.msg('请填写流名称和RTSP地址');
                 return;
             }
 
@@ -359,30 +353,22 @@
                 })
                 .finally(() => {
                     this.innerHTML = '<i class="fas fa-plus"></i> 确认添加';
-                    const addModal = bootstrap.Modal.getInstance(document.getElementById('addRtspModal'));
-                    addModal.hide();
+                    layer.closeAll();
                     this.disabled = false;
                     form.reset();
                 })
-        });
-
-        // 弹窗关闭后重置状态
-        document.getElementById('addRtspModal').addEventListener('hidden.bs.modal', function () {
-            const submitBtn = document.getElementById('submitRtspBtn');
-            submitBtn.innerHTML = '<i class="fas fa-plus"></i> 确认添加';
-            submitBtn.disabled = false;
-            document.getElementById('rtspAddForm').reset();
-            document.getElementById('rtspCheckResult').innerHTML = '';
-        });
-    });
-
-    // 暴露全局方法，调用父页面配置抽屉
-    function openConfigDrawer(material) {
-        if (window.parent && typeof window.parent.openConfigDrawer === 'function') {
-            window.parent.openConfigDrawer(material);
-        } else {
-            alert('配置功能暂未就绪，请稍后再试');
         }
+
+    
+    function openResultModal(projectId, materialId) {
+        layer.open({
+            title:"推理结果详情",
+            type: 2, 
+            area: ['80%', '90%'],
+            content: `/api/inference/${projectId}/result/${materialId}` //这里content是一个普通的String
+        });
     }
+
+    
 </script>
 {% endblock %}

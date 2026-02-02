@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}AI模型训练平台{% endblock %}</title>
+    
     <!-- Bootstrap CSS -->
     <script src="/static/js/jquery-2.1.4.min.js"></script>
     <link href="/static/css/bootstrap.min.css" rel="stylesheet">
@@ -12,20 +13,24 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="/static/css/all.min.css">
 
-    <!-- Vue 3 -->
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+        <!-- Vue 3 -->
+    <script src="/static/js/vue.global.js"></script>
 
     <!-- axios -->
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="/static/js/axios.min.js"></script>
+    <!-- Bootstrap JS -->
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
+
+    {% block extra_css %}{% endblock %}
 
     <style>
-        .flex-column .nav-link {
-            color: black;
-        }
+    .flex-column .nav-link{
+        color: black;
+    }
+    .flex-column .nav-link.active{
+        color: var(--bs-nav-link-color);
+    }
 
-        .flex-column .nav-link.active {
-            color: var(--bs-nav-link-color);
-        }
     </style>
 </head>
 
@@ -59,7 +64,6 @@
 
     <div class="container mt-4" style="max-width: 95%;">
         {% with messages = get_flashed_messages(with_categories=true) %}
-
         {% if messages %}
         {% for category, message in messages %}
         <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show"
@@ -73,7 +77,6 @@
 
         {% block content %}{% endblock %}
     </div>
-    </div>
 
     <!-- Footer -->
     <footer class="bg-light text-center py-3 mt-5">
@@ -82,16 +85,8 @@
         </div>
     </footer>
 
-    <!-- Bootstrap JS -->
-    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    
     {% block extra_js %}{% endblock %}
 </body>
-
-<script>
-    window.ALLOWED_ORIGINS = [
-        window.location.origin,
-        // 'https://inference.xxx.com'
-    ];
-</script>
 
 </html>

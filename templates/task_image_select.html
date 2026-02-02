@@ -99,7 +99,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="container" style="padding:5px;">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="mb-0">项目图片 ({{ pagination.total }} 张)</h4>
         <div>
@@ -121,6 +121,7 @@
         <button id="deselectAllBtn" class="btn btn-sm btn-outline-secondary">
             <i class="fas fa-square"></i> 取消全选
         </button>
+        <button class="btn btn-primary"  onclick="requestSelectedData()">确定</button>
     </div>
 
     {% if images %}
@@ -249,17 +250,10 @@
     }
 
     // 3. 监听父页面的请求消息，被动返回数据
-    window.addEventListener('message', function (event) {
-
-        // 响应父页面的数据请求
-        if (event.data.type === 'requestSelectedData') {
+    function requestSelectedData() {
             const images = getSelectedImages();
-            window.parent.postMessage(
-                { type: 'iframeSelectedImageData', data: images },
-                event.origin // 直接返回发送方域名，更安全
-            );
-        }
-    });
+            parent.buildTaskItemList(images);
+    }
 
 </script>
 {% endblock %}

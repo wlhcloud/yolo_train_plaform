@@ -1,3 +1,4 @@
+
 {% extends "base.html" %}
 
 {% block title %}图片管理 - {{ project.name }} - AI模型训练平台{% endblock %}
@@ -97,37 +98,43 @@
 {% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 100%;">
+<div class="container" style="max-width: 100%;" >
     <div class="row">
         {% set current_nav_key = 'images'%}
         {% include "project_nav.html"%}
-        <div class="col-10">
+        <div class="col-10"  ms-controller="main_bs_controller">
             <div class="row">
                 <ul class="nav nav-tabs" id="tabContainer">
                     <li class="nav-item">
                         <!-- 移除href=""避免默认跳转，添加data属性存储对应iframe的URL（按需修改） -->
                         <a class="nav-link active" id="image-tab" aria-current="page" onclick="screenshotTab(this)"
-                            data-iframe-url="{{ url_for('main.images_upload', project_id=project.id) if project else '' }}">
+                            data-iframe-url="{{ url_for('main.images_upload', project_id=project.id,page=page,per_page=per_page) if project else '' }}">
                             上传图片
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" id="rtsp-tab" onclick="screenshotTab(this)"
-                            data-iframe-url="{{ url_for('main.rtsp_capture', project_id=project.id) if project else '' }}">
+                            data-iframe-url="{{ url_for('main.rtsp_capture', project_id=project.id,page=page,per_page=per_page) if project else '' }}">
                             RTSP截图
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" id="video-tab" onclick="screenshotTab(this)"
-                            data-iframe-url="{{ url_for('main.video_capture', project_id=project.id) if project else '' }}">
+                            data-iframe-url="{{ url_for('main.video_capture', project_id=project.id,page=page,per_page=per_page) if project else '' }}">
                             视频截图
                         </a>
                     </li>
                 </ul>
 
                 <!-- 新增iframe容器：用于承载切换后的iframe内容，初始化隐藏（切换后显示） -->
-                <div id="iframeContainer"
-                    style="width: 100%; height: 600px; margin-top: 10px; border: 1px solid #eee; border-radius: 4px;">
+                <div id="iframeContainer" 
+                        ms-include-src="PageCodeRdm" data-include-rendered='Temprender'
+                    style="width: 100%;
+    padding-top: 10px;
+    margin-top: -2px;
+    border: 1px solid #eee;
+    border-radius: 0px;
+    border-top: 0px;">
                 </div>
             </div>
         </div>
@@ -135,23 +142,40 @@
     {% endblock %}
 
     {% block extra_js %}
+    <script src="/static/js/avalon/avalon1.4.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            // 触发默认Tab的切换逻辑
-            const defaultTab = document.getElementById('image-tab');
-            if (defaultTab) {
-                screenshotTab(defaultTab);
-            }
+
+        var model = avalon.define({
+		$id: "main_bs_controller",
+        PageCode: "/static/js/avalon/Loading", //需要加载的模板
+		PageCodeRdm: "/static/js/avalon/Loading.html", //需要加载的模板
+		rdm: Math.random(), //随机数
+		Temprender: function() {
+			
+		} //组件加载完成事件
         });
+	avalon.ready(function() {
+        const tabid=  localStorage.getItem("tabid");
+		// 触发默认Tab的切换逻辑
+        const defaultTab = document.getElementById(tabid||"image-tab");
+        if (defaultTab) {
+            screenshotTab(defaultTab);
+        }
+	});
+        
 
         /**
          * Tab切换函数：实现Tab高亮+对应iframe加载
          * @param {HTMLElement} tabLink - 点击的Tab标签a元素（通过this传递）
          */
         function screenshotTab(tabLink) {
+            
             // 阻止a标签默认跳转行为
             event.preventDefault();
-
+            
+            const iframeUrl = tabLink.dataset.iframeUrl;
+            localStorage.setItem("tabid",tabLink.getAttribute("id"));
+            model.PageCodeRdm = iframeUrl;
             // 2移除所有Tab的active高亮状态
             const allTabLinks = document.querySelectorAll('#tabContainer .nav-link');
             allTabLinks.forEach(link => {
@@ -163,36 +187,36 @@
             tabLink.classList.add('active');
             tabLink.setAttribute('aria-current', 'page');
 
-            const iframeUrl = tabLink.dataset.iframeUrl;
-            const iframeContainer = document.getElementById('iframeContainer');
+            // const iframeUrl = tabLink.dataset.iframeUrl;
+            // const iframeContainer = document.getElementById('iframeContainer');
 
-            if (!iframeUrl || iframeUrl === '#') {
-                iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #999;">暂无可用内容</div>';
-                return;
-            }
+            // if (!iframeUrl || iframeUrl === '#') {
+            //     iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #999;">暂无可用内容</div>';
+            //     return;
+            // }
 
-            let iframe = iframeContainer.querySelector('iframe');
-            if (iframe) {
-                iframe.src = iframeUrl;
-            } else {
-                // 动态创建新iframe并插入容器
-                iframe = document.createElement('iframe');
-                iframe.src = iframeUrl;
-                iframe.width = '100%';
-                iframe.height = '100%';
-                iframe.frameBorder = '0'; // 移除iframe默认边框
-                iframe.allowFullscreen = true; // 允许全屏（可选，根据功能需求）
+            // let iframe = iframeContainer.querySelector('iframe');
+            // if (iframe) {
+            //     iframe.src = iframeUrl;
+            // } else {
+            //     // 动态创建新iframe并插入容器
+            //     iframe = document.createElement('iframe');
+            //     iframe.src = iframeUrl;
+            //     iframe.width = '100%';
+            //     iframe.height = '100%';
+            //     iframe.frameBorder = '0'; // 移除iframe默认边框
+            //     iframe.allowFullscreen = true; // 允许全屏（可选，根据功能需求）
 
-                iframe.onload = function () {
-                    console.log(`[${tabLink.innerText}] iframe加载完成`);
-                };
-                iframe.onerror = function () {
-                    iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #f56c6c;">内容加载失败，请重试</div>';
-                };
+            //     iframe.onload = function () {
+            //         console.log(`[${tabLink.innerText}] iframe加载完成`);
+            //     };
+            //     iframe.onerror = function () {
+            //         iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #f56c6c;">内容加载失败，请重试</div>';
+            //     };
 
-                iframeContainer.innerHTML = '';
-                iframeContainer.appendChild(iframe);
-            }
+            //     iframeContainer.innerHTML = '';
+            //     iframeContainer.appendChild(iframe);
+            // }
         }
     </script>
     {% endblock %}
