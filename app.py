@@ -22,8 +22,8 @@ project_task_locks = {}
 MAX_WORKERS = 5
 executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 # 媒体服务器路径
-MEDIA_SERVER = "http://127.0.0.1:8080/live/"  # 推流服务器地址
-RTSP_SERVER = "rtsp://127.0.0.1:8554/live/"  # 媒体服务地址
+MEDIA_SERVER = "http://wlhcloud.top:9132/live"  # 推流服务器地址
+RTSP_SERVER = "rtsp://wlhcloud.top:9133/live"  # 媒体服务地址
 # 全局变量：后台线程用的scoped_session工厂
 backend_session_factory = None
 

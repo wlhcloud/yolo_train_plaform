@@ -48,6 +48,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app import project_task_locks, executor
 from services.inference_service import inference_service
 from services.video_service import video_service
+from services.camera_service import camera_service
 from services.reasoning_material_service import (
     ReasoningMaterialService,
     reasoning_material_service,
@@ -105,16 +106,6 @@ export_service_spec = importlib.util.spec_from_file_location(
 export_service = importlib.util.module_from_spec(export_service_spec)
 export_service_spec.loader.exec_module(export_service)
 
-# 摄像头服务
-camera_service_spec = importlib.util.spec_from_file_location(
-    "camera_service",
-    os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "services", "camera_service.py"
-    ),
-)
-camera_service = importlib.util.module_from_spec(camera_service_spec)
-camera_service_spec.loader.exec_module(camera_service)
-
 # 视频服务
 video_service_spec = importlib.util.spec_from_file_location(
     "video_service",
@@ -140,7 +131,6 @@ training_service_instance = training_service.TrainingService()
 dataset_service_instance = dataset_service.DatasetService()
 annotation_service_instance = annotation_service.AnnotationService()
 export_service_instance = export_service.ExportService()
-camera_service_instance = camera_service.CameraService()
 video_service = video_service.VideoService()
 image_service_instance = image_service.ImageService()
 
@@ -844,9 +834,37 @@ def api_start_rtsp_capture(project_id):
         interval = data.get("interval", 5)
         max_count = data.get("max_count", 10)
 
-        result = camera_service_instance.start_rtsp_capture(
+        result = camera_service.start_rtsp_capture(
             project_id, rtsp_url, interval, max_count
         )
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+
+@main.route("/api/project/<int:project_id>/rtsp/manual_capture")
+def api_rtsp_manual_capture(project_id):
+    try:
+        project = Project.query.get_or_404(project_id)
+        data = request.get_json()
+        # base64编码的图片
+        screenshot_url = data.get("screenshot_url")
+        result = camera_service.save_rtsp_manual_capture(project_id, screenshot_url)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+
+@main.route("/api/project/<int:project_id>/rtsp/preview", methods=["POST"])
+def api_preview_rtsp(project_id):
+    """预览RTSP视频流"""
+    try:
+        project = Project.query.get_or_404(project_id)
+        data = request.get_json()
+
+        rtsp_url = data.get("rtsp_url")
+
+        result = camera_service.preview_rtsp_stream(project_id, rtsp_url)
         return jsonify(result)
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
@@ -855,14 +873,28 @@ def api_start_rtsp_capture(project_id):
 @main.route("/api/project/<int:project_id>/rtsp/stop", methods=["POST"])
 def api_stop_rtsp_capture(project_id):
     """停止RTSP截图"""
-    result = camera_service_instance.stop_rtsp_capture(project_id)
+    result = camera_service.stop_rtsp_capture(project_id)
+    return jsonify(result)
+
+
+@main.route("/api/project/<int:project_id>/rtsp/stop_preview", methods=["POST"])
+def api_stop_rtsp_preview(project_id):
+    """停止RTSP预览"""
+    result = camera_service.stop_rtsp_preview(project_id)
     return jsonify(result)
 
 
 @main.route("/api/project/<int:project_id>/rtsp/status")
 def api_rtsp_status(project_id):
     """获取RTSP截图状态"""
-    result = camera_service_instance.get_rtsp_status(project_id)
+    result = camera_service.get_rtsp_status(project_id)
+    return jsonify(result)
+
+
+@main.route("/api/project/<int:project_id>/rtsp/preview_status")
+def api_rtsp_preview_status(project_id):
+    """获取RTSP预览状态"""
+    result = camera_service.get_rtsp_preview_status(project_id)
     return jsonify(result)
 
 
@@ -989,7 +1021,7 @@ def api_video_status(project_id):
 @main.route("/api/onvif/discover")
 def api_discover_onvif_devices():
     """发现ONVIF设备"""
-    result = camera_service_instance.discover_onvif_devices()
+    result = camera_service.discover_onvif_devices()
     return jsonify(result)
 
 
@@ -1004,7 +1036,7 @@ def api_get_onvif_profiles(device_ip, device_port):
         if not username or not password:
             return jsonify({"success": False, "message": "用户名和密码不能为空"})
 
-        result = camera_service_instance.get_onvif_profiles(
+        result = camera_service.get_onvif_profiles(
             device_ip, device_port, username, password
         )
         return jsonify(result)
@@ -1027,7 +1059,7 @@ def api_start_onvif_capture(project_id):
         interval = data.get("interval", 5)
         max_count = data.get("max_count", 10)
 
-        result = camera_service_instance.start_onvif_capture(
+        result = camera_service.start_onvif_capture(
             project_id,
             device_ip,
             device_port,
@@ -1052,7 +1084,7 @@ def api_stop_onvif_capture(project_id):
         if not profile_token:
             return jsonify({"success": False, "message": "配置文件token不能为空"})
 
-        result = camera_service_instance.stop_onvif_capture(project_id, profile_token)
+        result = camera_service.stop_onvif_capture(project_id, profile_token)
         return jsonify(result)
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
@@ -1068,7 +1100,7 @@ def api_onvif_status(project_id):
         if not profile_token:
             return jsonify({"success": False, "message": "配置文件token不能为空"})
 
-        result = camera_service_instance.get_onvif_status(project_id, profile_token)
+        result = camera_service.get_onvif_status(project_id, profile_token)
         return jsonify(result)
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
@@ -1221,23 +1253,9 @@ def stop_inference(project_id):
 
             stop_result = rtsp_manager.stop_rtsp_task(task_id=material_id)
             if not stop_result:
-                return (
-                    jsonify({"success": False, "message": "停止任务返回结果异常"}),
-                    500,
-                )
-            if stop_result.get("status") != "stopped":
-                return (
-                    jsonify(
-                        {
-                            "success": False,
-                            "message": stop_result.get("error", "停止推理失败"),
-                        }
-                    ),
-                    500,
-                )
+                return jsonify({"success": False, "message": "停止推理失败!"}), 404
 
         return jsonify({"success": True, "message": "停止推理成功"}), 200
-
     except Exception as e:
         db.session.rollback()
         log.error(f"停止推理失败：{str(e)}")

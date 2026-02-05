@@ -157,3 +157,26 @@ def get_project_upload_path(project_id, filename=None):
 def get_app_root():
     """获取应用根目录路径"""
     return os.getcwd()
+
+
+def save_base64_image(base64_data, save_path):
+    """
+    保存Base64编码的图片数据到文件
+    :param base64_data: Base64编码的图片数据
+    :param save_path: 保存路径
+    :return: 是否保存成功
+    """
+    try:
+        import base64
+
+        # 解码Base64数据
+        image_data = base64.b64decode(base64_data)
+
+        # 写入文件
+        with open(save_path, "wb") as f:
+            f.write(image_data)
+
+        return True
+    except Exception as e:
+        print(f"保存Base64图片失败: {e}")
+        return False

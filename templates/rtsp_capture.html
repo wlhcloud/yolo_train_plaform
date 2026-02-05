@@ -1,9 +1,3 @@
-<!-- Bootstrap CSS -->
-<script src="/static/js/jquery-2.1.4.min.js"></script>
-<link href="/static/css/bootstrap.min.css" rel="stylesheet">
-<script src="/static/js/layer/layer.js"></script>
-<!-- Font Awesome -->
-<link rel="stylesheet" href="/static/css/all.min.css">
 {% block extra_css %}
 <style>
     .capture-card {
@@ -32,6 +26,20 @@
 
     .status-pending {
         background-color: #ffc107;
+    }
+
+    .video-container {
+        position: relative;
+        background: #000;
+        border-radius: 8px;
+        overflow: hidden;
+        margin-bottom: 15px;
+    }
+
+    #videoPlayer {
+        width: 100%;
+        height: 400px;
+        background: #000;
     }
 </style>
 {% endblock %}
@@ -66,8 +74,30 @@
                     <form id="rtspForm">
                         <div class="mb-3">
                             <label for="rtspUrl" class="form-label">RTSP地址</label>
-                            <input type="text" class="form-control" id="rtspUrl"
-                                placeholder="rtsp://username:password@ip:port/path" required>
+                            <input type="text" class="form-control" style="width: 60%;display: inline-block;"
+                                id="rtspUrl" placeholder="rtsp://username:password@ip:port/path" required>
+                            <button type="submit" class="btn btn-primary" id="previewRtspBtn">
+                                <i class="fas fa-play"></i> 预览
+                            </button>
+                            <button type="button" class="btn btn-secondary" id="stopPreviewRtspBtn"
+                                style="display: none;">
+                                <i class="fas fa-video"></i> 停止预览
+                        </div>
+                        <!-- 视频播放器区域 -->
+                        <div id="videoPlayerContainer" style="display: none;">
+                            <div class="video-container">
+                                <video id="videoPlayer" controls>
+                                    <source id="videoSource" src="">
+                                    您的浏览器不支持视频播放
+                                </video>
+                            </div>
+
+                            <!-- 手动截图控制 -->
+                            <div class="capture-controls">
+                                <button class="btn btn-primary manual-capture-btn" id="manualCaptureBtn">
+                                    <i class="fas fa-camera"></i> 手动截图
+                                </button>
+                            </div>
                         </div>
 
                         <div class="row">
@@ -87,8 +117,8 @@
                             </div>
                         </div>
 
-                        <button type="submit" class="btn btn-primary" id="startRtspBtn">
-                            <i class="fas fa-play"></i> 开始截图
+                        <button type="button" class="btn btn-primary" id="startRtspBtn">
+                            <i class="fas fa-play"></i> 开始截图（自动）
                         </button>
                         <button type="button" class="btn btn-danger" id="stopRtspBtn" disabled>
                             <i class="fas fa-stop"></i> 停止截图
@@ -206,6 +236,16 @@
                             <small>已截图: <span id="rtspCapturedCount">0</span>/<span id="rtspMaxCount">0</span></small>
                         </div>
                     </div>
+                    <div class="mb-3">
+                        <h6>RTSP预览状态</h6>
+                        <div id="rtspPreviewStatus">
+                            <span class="status-indicator status-stopped"></span>
+                            <span>未运行</span>
+                        </div>
+                        <!-- <div class="mt-2">
+                            <small>已截图: <span id="rtspPreviewCapturedCount">0</span></small>
+                        </div> -->
+                    </div>
 
                     <div class="mb-3">
                         <h6>ONVIF截图状态</h6>
@@ -235,11 +275,19 @@
 
     $(function () {
         const projectId = '{{ project.id }}'
+        // 全局声明hls实例，方便销毁重复实例
+        let hlsInstance = null;
 
         // RTSP截图功能
         const rtspForm = document.getElementById('rtspForm');
         const startRtspBtn = document.getElementById('startRtspBtn');
         const stopRtspBtn = document.getElementById('stopRtspBtn');
+        const previewRtspBtn = document.getElementById('previewRtspBtn');
+        const videoPlayerContainer = document.getElementById('videoPlayerContainer');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const videoSource = document.getElementById('videoSource');
+        const manualCaptureBtn = document.getElementById('manualCaptureBtn');
+        const stopPreviewRtspBtn = document.getElementById('stopPreviewRtspBtn');
 
         // ONVIF功能
         const discoverBtn = document.getElementById('discoverBtn');
@@ -261,9 +309,10 @@
         const onvifCapturedCount = document.getElementById('onvifCapturedCount');
         const onvifMaxCount = document.getElementById('onvifMaxCount');
         const refreshStatusBtn = document.getElementById('refreshStatusBtn');
+        const rtspPreviewStatus = document.getElementById('rtspPreviewStatus');
 
         // RTSP截图表单提交
-        rtspForm.addEventListener('submit', function (e) {
+        startRtspBtn.addEventListener('click', function (e) {
             e.preventDefault();
 
             const rtspUrl = document.getElementById('rtspUrl').value;
@@ -271,8 +320,6 @@
             const maxCount = parseInt(document.getElementById('maxCount').value);
 
             startRtspBtn.disabled = true;
-            startRtspBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 启动中...';
-
             fetch(`/api/project/${projectId}/rtsp/start`, {
                 method: 'POST',
                 headers: {
@@ -289,17 +336,129 @@
                     if (data.success) {
                         stopRtspBtn.disabled = false;
                         updateRtspStatus();
+                        startRtspBtn.innerHTML = '<i class="fas fa-play"></i> 正在运行';
                     } else {
                         layer.msg('启动失败: ' + data.message);
                         startRtspBtn.disabled = false;
-                        startRtspBtn.innerHTML = '<i class="fas fa-play"></i> 开始截图';
+                        startRtspBtn.innerHTML = '<i class="fas fa-play"></i> 开始截图（自动）';
                     }
                 })
                 .catch(error => {
                     console.error('Error:', error);
                     layer.msg('启动截图时发生错误');
                     startRtspBtn.disabled = false;
-                    startRtspBtn.innerHTML = '<i class="fas fa-play"></i> 开始截图';
+                    startRtspBtn.innerHTML = '<i class="fas fa-play"></i> 开始截图（自动）';
+                });
+        });
+        stopPreviewRtspBtn.addEventListener('click', function () {
+            // 停止预览视频
+            if (hlsInstance) {
+                hlsInstance.destroy();
+                hlsInstance = null;
+            }
+            videoPlayer.pause();
+            videoPlayerContainer.style.display = 'none';
+            // 显示预览按钮，隐藏停止预览按钮
+            previewRtspBtn.style.display = 'block';
+            stopPreviewRtspBtn.style.display = 'none';
+
+            fetch(`/api/project/${projectId}/rtsp/stop_preview`, {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateRtspStatus();
+                    } else {
+                        layer.msg('停止预览失败: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    layer.msg('停止预览时发生错误');
+                });
+        });
+
+        manualCaptureBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            // 1. 检查视频是否正在播放
+            if (videoPlayer.paused || videoPlayer.ended) {
+                layer.msg('视频未播放，无法截图');
+                return;
+            }
+            // 2. 创建Canvas元素，尺寸与视频实际分辨率一致
+            const canvas = document.createElement('canvas');
+            // 关键：使用videoWidth/videoHeight（视频原始分辨率）而非style宽高
+            canvas.width = videoPlayer.videoWidth;
+            canvas.height = videoPlayer.videoHeight;
+
+            // 3. 将视频当前帧绘制到Canvas
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(videoPlayer, 0, 0, canvas.width, canvas.height);
+
+            // 4. 将Canvas转为PNG图片URL
+            const screenshotUrl = canvas.toDataURL('image/png');
+
+            // 5. 发送截图数据到服务器保存
+            fetch(`/api/project/${projectId}/rtsp/manual_capture`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    screenshot_url: screenshotUrl
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        layer.msg('截图已保存');
+                        updateRtspStatus();
+                    } else {
+                        layer.msg('截图保存失败: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    layer.msg('截图保存时发生错误');
+                });
+        });
+
+        // RTSP预览功能
+        previewRtspBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+
+            const rtspUrl = document.getElementById('rtspUrl').value;
+            if (!rtspUrl) {
+                layer.msg('请先输入RTSP地址');
+                return;
+            }
+            fetch(`/api/project/${projectId}/rtsp/preview`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    rtsp_url: rtspUrl
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        let mu38_url = data.data.mu38_url
+                        layer.msg('预览成功: ' + mu38_url);
+                        videoPlayerContainer.style.display = 'block';
+                        initHLSPlayer(mu38_url);
+                        // 显示停止预览按钮，隐藏预览按钮
+                        stopPreviewRtspBtn.style.display = 'block';
+                        previewRtspBtn.style.display = 'none';
+                    } else {
+                        layer.msg('预览失败: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    layer.msg('预览时发生错误');
                 });
         });
 
@@ -317,6 +476,7 @@
                         startRtspBtn.disabled = false;
                         stopRtspBtn.disabled = true;
                         stopRtspBtn.innerHTML = '<i class="fas fa-stop"></i> 停止截图';
+                        startRtspBtn.innerHTML = '<i class="fas fa-play"></i> 开始截图（自动）';
                         updateRtspStatus();
                     } else {
                         layer.msg('停止失败: ' + data.message);
@@ -511,6 +671,7 @@
                     if (data.success) {
                         stopOnvifBtn.disabled = false;
                         updateOnvifStatus(profileToken);
+                        startOnvifBtn.innerHTML = '<i class="fas fa-play"></i> 开始截图';
                     } else {
                         layer.msg('启动失败: ' + data.message);
                         startOnvifBtn.disabled = false;
@@ -569,9 +730,113 @@
                 updateOnvifStatus(document.getElementById('selectedProfile').value);
             }
         });
+        // 初始化HLS播放器（修复版）
+        function initHLSPlayer(m3u8Url) {
+            // 安全检查1：video元素是否存在
+            if (!videoPlayer) {
+                layer.msg("未找到视频播放容器", { icon: 2 });
+                return;
+            }
+            // 安全检查2：m3u8地址是否有效
+            if (!m3u8Url || !m3u8Url.startsWith('http')) {
+                layer.msg("无效的m3u8播放地址", { icon: 2 });
+                return;
+            }
 
+            // 关键修复：先销毁旧的HLS实例（避免重复初始化）
+            if (hlsInstance) {
+                console.log("销毁旧的HLS实例");
+                hlsInstance.destroy();
+                hlsInstance = null;
+            }
+            // 清空video原有资源
+            videoPlayer.pause();
+            videoPlayer.src = '';
+            videoSource.src = '';
+
+            // 关键修复：先检查window.Hls是否存在，再判断支持性
+            if (window.Hls && Hls.isSupported()) {
+                try {
+                    // 初始化HLS实例，优化实时性配置
+                    hlsInstance = new Hls({
+                        maxBufferLength: 10,  // 最大缓冲区长度（秒），越小越实时
+                        maxMaxBufferLength: 30
+                    });
+
+                    // 监听HLS错误
+                    hlsInstance.on(Hls.Events.ERROR, function (event, data) {
+                        console.error("HLS播放错误：", data);
+                        // 非致命错误不弹窗，仅打印
+                        if (!data.fatal) {
+                            console.warn("非致命HLS错误：", data.details);
+                            return;
+                        }
+                        // 致命错误处理
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                layer.msg("视频流连接失败，正在重试...", { icon: 2, time: 2000 });
+                                hlsInstance.stopLoad();
+                                setTimeout(() => hlsInstance.startLoad(), 1000);
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                layer.msg("视频解码失败，正在恢复...", { icon: 2, time: 2000 });
+                                hlsInstance.recoverMediaError();
+                                break;
+                            default:
+                                layer.msg("视频播放出错：" + (data.details || "未知错误"), { icon: 2 });
+                                hlsInstance.destroy();
+                                hlsInstance = null;
+                                break;
+                        }
+                    });
+
+                    // 加载m3u8并绑定到video
+                    hlsInstance.loadSource(m3u8Url);
+                    hlsInstance.attachMedia(videoPlayer);
+
+                    // 监听清单解析完成
+                    hlsInstance.on(Hls.Events.MANIFEST_PARSED, function () {
+                        console.log("HLS流解析成功，准备播放");
+                        videoPlayer.play().catch(err => {
+                            if (err.name === 'NotAllowedError') {
+                                layer.msg("浏览器限制自动播放，请手动点击播放按钮", { icon: 1 });
+                            } else {
+                                layer.msg("播放失败：" + err.message, { icon: 2 });
+                            }
+                        });
+                    });
+                } catch (e) {
+                    console.error("初始化HLS失败：", e);
+                    layer.msg("初始化视频播放器失败：" + e.message, { icon: 2 });
+                }
+            }
+            // 兼容Safari原生HLS
+            else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                console.log("浏览器原生支持HLS，直接加载");
+                videoPlayer.src = m3u8Url;
+                videoPlayer.load();
+                // 监听加载完成
+                videoPlayer.addEventListener('loadedmetadata', function () {
+                    videoPlayer.play().catch(err => {
+                        if (err.name === 'NotAllowedError') {
+                            layer.msg("浏览器限制自动播放，请手动点击播放按钮", { icon: 1 });
+                        } else {
+                            layer.msg("播放失败：" + err.message, { icon: 2 });
+                        }
+                    });
+                }, { once: true });
+                // 监听原生错误
+                videoPlayer.addEventListener('error', function (err) {
+                    console.error("原生HLS错误：", err);
+                    layer.msg("视频播放失败，请检查流地址是否有效", { icon: 2 });
+                }, { once: true });
+            } else {
+                layer.msg("您的浏览器不支持HLS视频播放，请使用Chrome/Firefox/Safari（版本≥80）", { icon: 0 });
+            }
+        }
         // 更新RTSP状态
         function updateRtspStatus() {
+            // 自动截图状态接口
             fetch(`/api/project/${projectId}/rtsp/status`)
                 .then(response => response.json())
                 .then(data => {
@@ -579,6 +844,9 @@
                         // 更新状态显示
                         if (data.status.running) {
                             rtspStatus.innerHTML = '<span class="status-indicator status-running"></span> 运行中';
+                            startRtspBtn.innerHTML = '<i class="fas fa-play"></i> 正在运行';
+
+
                             startRtspBtn.disabled = true;
                             stopRtspBtn.disabled = false;
                         } else {
@@ -596,6 +864,39 @@
                         stopRtspBtn.disabled = true;
                         rtspCapturedCount.textContent = '0';
                         rtspMaxCount.textContent = '0';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            // 预览状态接口（可选）
+            fetch(`/api/project/${projectId}/rtsp/preview_status`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && !data.status.error_msg) {
+                        console.log('RTSP预览状态：', data.status);
+                        // 如果正在预览，确保视频播放器显示
+                        // 如果显示器已经在播放同一个URL的流，就不重复初始化
+                        if (!hlsInstance) {
+                            videoPlayerContainer.style.display = 'block';
+                            initHLSPlayer(data.status.mu38_url);
+                            // 显示停止预览按钮，隐藏预览按钮
+                            stopPreviewRtspBtn.style.display = 'inline-block';
+                            previewRtspBtn.style.display = 'none';
+                        }
+                        rtspPreviewStatus.innerHTML = '<span class="status-indicator status-running"></span> 预览中';
+                    } else {
+                        // 预览接口返回错误，隐藏视频播放器
+                        videoPlayerContainer.style.display = 'none';
+                        // 显示预览按钮，隐藏停止预览按钮
+                        previewRtspBtn.style.display = 'inline-block';
+                        stopPreviewRtspBtn.style.display = 'none';
+                        // 移除视频源
+                        if (hlsInstance) {
+                            hlsInstance.destroy();
+                            hlsInstance = null;
+                        }
+                        rtspPreviewStatus.innerHTML = '<span class="status-indicator status-stopped"></span> 未运行';
                     }
                 })
                 .catch(error => {

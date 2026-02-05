@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}AI模型训练平台{% endblock %}</title>
-    
+
     <!-- Bootstrap CSS -->
     <script src="/static/js/jquery-2.1.4.min.js"></script>
     <link href="/static/css/bootstrap.min.css" rel="stylesheet">
@@ -13,7 +13,7 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="/static/css/all.min.css">
 
-        <!-- Vue 3 -->
+    <!-- Vue 3 -->
     <script src="/static/js/vue.global.js"></script>
 
     <!-- axios -->
@@ -21,16 +21,19 @@
     <!-- Bootstrap JS -->
     <script src="/static/js/bootstrap.bundle.min.js"></script>
 
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+
     {% block extra_css %}{% endblock %}
 
     <style>
-    .flex-column .nav-link{
-        color: black;
-    }
-    .flex-column .nav-link.active{
-        color: var(--bs-nav-link-color);
-    }
+        .flex-column .nav-link {
+            color: black;
+        }
 
+        .flex-column .nav-link.active {
+            color: var(--bs-nav-link-color);
+        }
     </style>
 </head>
 
@@ -85,7 +88,7 @@
         </div>
     </footer>
 
-    
+
     {% block extra_js %}{% endblock %}
 </body>
 
