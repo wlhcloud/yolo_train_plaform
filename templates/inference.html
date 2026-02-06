@@ -32,7 +32,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 100%;" ms-controller="main_bs_controller">
+<div class="container" style="max-width: 100%;">
     <div class="row">
         {% set current_nav_key = 'inference'%}
         {% include "project_nav.html"%}
@@ -128,14 +128,13 @@
                             </form>
                         </div>
                     </div>
-                    <div class="card shadow-sm">
+                    <div class="card mb-4">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <div>
                                 <i class="fas fa-play-circle me-1"></i>
                                 推理结果分类配置
                             </div>
-                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal"
-                                onclick="addLabelModal()">
+                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" onclick="addLabelModal()">
                                 <i class="fas fa-plus"></i> 新增
                             </button>
                         </div>
@@ -174,7 +173,6 @@
                             </div>
                         </div>
                     </div>
-
                 </div>
 
                 <div class="col-md-8">
@@ -185,9 +183,18 @@
                                 推理结果
                             </div>
                             <div>
-                                <button class="btn btn-sm btn-primary" onclick="startInference('{{ project.id }}',null)"
+                                <button class="btn btn-sm btn-primary" id="complexReasoningBtn">
+                                    <i class="fas fa-plus"></i> 综合推理
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary" id="materialReasoningBtn">
+                                    <i class="fas fa-cog"></i>素材推理
+                                </button>
+                                <!-- <button class="btn btn-sm btn-primary" onclick="startInference('{{ project.id }}',null)"
                                     id="startInferenceBtn">
-                                    <i class="fas fa-plus"></i> 开始推理
+                                    <i class="fas fa-play"></i> 开始推理
+                                </button> -->
+                                <button type="button" class="btn btn-sm btn-primary" id="runInference">
+                                    <i class="fas fa-play me-1"></i>开始推理
                                 </button>
                                 <button class="btn btn-sm btn-primary" id="stopInferenceBtn" style="display: none;"
                                     onclick="stopInference('{{ project.id }}',null)">
@@ -199,15 +206,23 @@
                             </div>
                         </div>
 
-                        <div class="card-body"  
-                        id="inferenceMaterialIframe"
-                        ms-include-src="PageCodeRdm" data-include-rendered='Temprender'
-                    style="width: 100%;
-    padding-top: 10px;
-    margin-top: -2px;
-    border: 1px solid #eee;
-    border-radius: 0px;
-    border-top: 0px;">
+                        <div class="card-body" id="inferenceMaterialIframe" ms-include-src="PageCodeRdm"
+                            data-include-rendered='Temprender' ms-controller="inference_material_controller" style="width: 100%;
+                            padding-top: 10px;
+                            margin-top: -2px;
+                            border: 1px solid #eee;
+                            border-radius: 0px;
+                            border-top: 0px;
+                            display: none;">
+                        </div>
+                        <div class="card-body" id="inferenceComplexIframe" ms-controller="complex_reasoning_controller"
+                            ms-include-src="PageCodeRdm" data-include-rendered='Temprender' style="width: 100%;
+                            padding-top: 10px;
+                            margin-top: -2px;
+                            border: 1px solid #eee;
+                            border-radius: 0px;
+                            border-top: 0px;
+                            display: block;">
                         </div>
                     </div>
                 </div>
@@ -216,7 +231,7 @@
     </div>
 </div>
 
-<div style="display: none;" id="addLabelModal" >
+<div style="display: none;" id="addLabelModal">
     <div class="modal-dialog modal-al modal-dialog-centered" style="padding:20px;">
         <div class="modal-content">
             <div class="modal-body">
@@ -270,31 +285,69 @@
 <script src="/static/js/avalon/avalon1.4.js"></script>
 <script>
 
-    var model = avalon.define({
-		$id: "main_bs_controller",
-        PageCode: "/static/js/avalon/Loading", //需要加载的模板
-		PageCodeRdm: "{{ url_for('main.api_inference_material_page', project_id=project.id) }}", //需要加载的模板
-		rdm: Math.random(), //随机数
-		Temprender: function() {
-			
-		} //组件加载完成事件
-        });
-	avalon.ready(function() {
-	});
+    var inference_material_page = avalon.define({
+        $id: "inference_material_controller", // 唯一ID
+        PageCode: "/static/js/avalon/Loading",
+        PageCodeRdm: "{{ url_for('main.api_inference_material_page', project_id=project.id) }}",
+        rdm: Math.random(),
+        Temprender: function () {
+            console.log("渲染完成")
+        }
+    });
 
-    function addLabelModal(){
+    // 2. 复杂推理模型（对应inferenceComplexIframe）
+    var complex_reasoning_page = avalon.define({
+        $id: "complex_reasoning_controller", // 唯一ID
+        PageCode: "/static/js/avalon/Loading",
+        PageCodeRdm: "{{ url_for('main.api_complex_reasoning_page') }}",
+        rdm: Math.random(),
+        Temprender: function () { }
+    });
+    avalon.ready(function () {
+    });
+
+    // 新增：推理类型切换函数
+    function switchReasoningType(type) {
+        console.log('切换', type)
+        const materialIframe = document.getElementById('inferenceMaterialIframe');
+        const complexIframe = document.getElementById('inferenceComplexIframe');
+        const materialBtn = document.getElementById('materialReasoningBtn');
+        const complexBtn = document.getElementById('complexReasoningBtn');
+
+        // 重置按钮样式
+        materialBtn.classList.remove('btn-primary');
+        materialBtn.classList.add('btn-outline-primary');
+        complexBtn.classList.remove('btn-primary');
+        complexBtn.classList.add('btn-outline-primary');
+
+        if (type === 'complex') {
+            // 显示综合推理，隐藏素材推理
+            complexIframe.style.display = 'block';
+            materialIframe.style.display = 'none';
+            complexBtn.classList.remove('btn-outline-primary');
+            complexBtn.classList.add('btn-primary');
+        } else if (type === 'material') {
+            // 显示素材推理，隐藏综合推理
+            materialIframe.style.display = 'block';
+            complexIframe.style.display = 'none';
+            materialBtn.classList.remove('btn-outline-primary');
+            materialBtn.classList.add('btn-primary');
+        }
+    }
+
+    function addLabelModal() {
         layer.open({
-            title:"上传本地图片",
-            type: 1, 
+            title: "上传本地图片",
+            type: 1,
             area: ['500px', '350px'],
             content: $("#addLabelModal") //这里content是一个普通的String
         });
     }
-    
-    function openResultModal(projectId, materialId){
+
+    function openResultModal(projectId, materialId) {
         layer.open({
-            title:"推理结果详情",
-            type: 2, 
+            title: "推理结果详情",
+            type: 2,
             area: ['80%', '90%'],
             content: `/api/inference/${projectId}/result/${materialId}` //这里content是一个普通的String
         });
@@ -302,7 +355,7 @@
 
     window.addEventListener('message', function (event) {
         console.log('接收到消息：', event.origin, event.data)
-        if (!window.ALLOWED_ORIGINS.includes(event.origin)) return;
+        // if (!window.ALLOWED_ORIGINS.includes(event.origin)) return;
 
         // if (event.data.type === 'openResultModal') {
         //     const { projectId, materialId } = event.data;
@@ -419,37 +472,37 @@
 
 
     function addLabelBtn() {
-            const origin = document.querySelector(
-                'input[name="originLabel"]:checked'
-            )
+        const origin = document.querySelector(
+            'input[name="originLabel"]:checked'
+        )
 
-            const originId = origin.value;                // id
-            const originName = origin.dataset.name;       // name
+        const originId = origin.value;                // id
+        const originName = origin.dataset.name;       // name
 
-            const target = document.getElementById("targetLabelInput").value.trim();
+        const target = document.getElementById("targetLabelInput").value.trim();
 
-            if (!origin) {
-                layer.msg("请选择一个原始标签");
-                return;
-            }
-            if (!target) {
-                layer.msg("请输入映射标签");
-                return;
-            }
+        if (!origin) {
+            layer.msg("请选择一个原始标签");
+            return;
+        }
+        if (!target) {
+            layer.msg("请输入映射标签");
+            return;
+        }
 
-            const tbody = document.getElementById("labelMapTable");
+        const tbody = document.getElementById("labelMapTable");
 
-            const exists = Array.from(tbody.querySelectorAll('tr'))
-                .some(tr => tr.dataset.labelId === String(originId));
+        const exists = Array.from(tbody.querySelectorAll('tr'))
+            .some(tr => tr.dataset.labelId === String(originId));
 
-            if (exists) {
-                layer.msg('该标签已添加，请勿重复添加');
-                return;
-            }
+        if (exists) {
+            layer.msg('该标签已添加，请勿重复添加');
+            return;
+        }
 
-            const tr = document.createElement("tr");
-            tr.dataset.labelId = originId;
-            tr.innerHTML = `
+        const tr = document.createElement("tr");
+        tr.dataset.labelId = originId;
+        tr.innerHTML = `
         <td>${originName}</td>
         <td>${target}</td>
         <td class="text-center">
@@ -459,85 +512,85 @@
         </td>
     `;
 
-            const formData = new FormData()
-            formData.append('target', target);
+        const formData = new FormData()
+        formData.append('target', target);
 
-            // 修改标签
-            const url = `/api/inference/labels/${originId}/update`;
-            fetch(url, {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.json())
-                .then(response => {
-                    if (response.success) {
-                        layer.msg('新增成功！')
-                        tbody.appendChild(tr);
+        // 修改标签
+        const url = `/api/inference/labels/${originId}/update`;
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(response => {
+                if (response.success) {
+                    layer.msg('新增成功！')
+                    tbody.appendChild(tr);
 
-                    } else {
-                        layer.msg('新增失败！')
-                    }
-                })
-                .catch(error => {
-                    console.log('新增映射失败', error)
+                } else {
                     layer.msg('新增失败！')
-                })
-                .finally(() => {
-                })
-
-            document.getElementById("targetLabelInput").value = "";
-            const checkedRadio = document.querySelector('input[name="originLabel"]:checked');
-            if (checkedRadio) {
-                checkedRadio.checked = false;
-            }
-
-            const noneMsgTr = document.querySelector('.noneMsgTr');
-            if (noneMsgTr) {
-                noneMsgTr.style.display = 'none';
-            }
-
-            layer.closeAll();
-        }
-
-        // 定时查询项目推理状态
-        function getInferenceStatus() {
-            // 停止推理按钮
-            let startInferenceBtn = document.getElementById('startInferenceBtn')
-
-            fetch('{{ url_for("main.get_inference_status", project_id=project.id) }}', {
-                method: 'GET',
+                }
             })
-                .then(response => response.json())
-                .then(response => {
-                    if (!startInferenceBtn) return;
-                    if (response.success) {
-                        let stopInferenceBtn = document.getElementById("stopInferenceBtn")
-                        if (response.status === 'running') {
-                            // 推理中 -> 按钮不可点击，显示“推理中”
-                            startInferenceBtn.disabled = true;
-                            startInferenceBtn.textContent = '推理中';
-                            stopInferenceBtn.style.display = "block"
-                        } else if (response.status === 'finished') {
-                            // 推理完成或未开始 -> 按钮可点击，恢复原内容
-                            startInferenceBtn.disabled = false;
-                            startInferenceBtn.textContent = '开始推理';
-                            stopInferenceBtn.style.display = "none"
-                        } else if (response.status === 'error') {
-                            startInferenceBtn.disabled = false;
-                            startInferenceBtn.textContent = '开始推理';
-                            stopInferenceBtn.style.display = "none"
-                            layer.msg('推理出错，请重试');
-                        }
-                    } else {
-                        layer.msg(response.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('获取推理状态失败', error);
-                    stopInferenceBtn.style.display = "none"
+            .catch(error => {
+                console.log('新增映射失败', error)
+                layer.msg('新增失败！')
+            })
+            .finally(() => {
+            })
 
-                });
+        document.getElementById("targetLabelInput").value = "";
+        const checkedRadio = document.querySelector('input[name="originLabel"]:checked');
+        if (checkedRadio) {
+            checkedRadio.checked = false;
         }
+
+        const noneMsgTr = document.querySelector('.noneMsgTr');
+        if (noneMsgTr) {
+            noneMsgTr.style.display = 'none';
+        }
+
+        layer.closeAll();
+    }
+
+    // 定时查询项目推理状态
+    function getInferenceStatus() {
+        // 停止推理按钮
+        let startInferenceBtn = document.getElementById('startInferenceBtn')
+
+        fetch('{{ url_for("main.get_inference_status", project_id=project.id) }}', {
+            method: 'GET',
+        })
+            .then(response => response.json())
+            .then(response => {
+                if (!startInferenceBtn) return;
+                if (response.success) {
+                    let stopInferenceBtn = document.getElementById("stopInferenceBtn")
+                    if (response.status === 'running') {
+                        // 推理中 -> 按钮不可点击，显示“推理中”
+                        startInferenceBtn.disabled = true;
+                        startInferenceBtn.textContent = '推理中';
+                        stopInferenceBtn.style.display = "block"
+                    } else if (response.status === 'finished') {
+                        // 推理完成或未开始 -> 按钮可点击，恢复原内容
+                        startInferenceBtn.disabled = false;
+                        startInferenceBtn.textContent = '开始推理';
+                        stopInferenceBtn.style.display = "none"
+                    } else if (response.status === 'error') {
+                        startInferenceBtn.disabled = false;
+                        startInferenceBtn.textContent = '开始推理';
+                        stopInferenceBtn.style.display = "none"
+                        layer.msg('推理出错，请重试');
+                    }
+                } else {
+                    layer.msg(response.message);
+                }
+            })
+            .catch(error => {
+                console.error('获取推理状态失败', error);
+                stopInferenceBtn.style.display = "none"
+
+            });
+    }
 
     function startInference(projectId, materialId) {
         const modelType = document.querySelector('input[name="modelType"]:checked').value;
@@ -629,11 +682,223 @@
     }
 
 
+    // 显示推理结果
+    function displayInferenceResult(result) {
+        let resultHtml = '';
+        if (result.type === 'image') {
+            resultHtml = `
+                <div class="result-image-container">
+                    <img src="${result.image_url}" class="result-image" alt="推理结果">
+            `;
+
+            // 不再绘制检测框，因为图片上已经标注了
+            // 只显示检测到的对象总数
+            resultHtml += `</div>`;
+            resultHtml += `<p class="mt-3">检测到 ${result.total_count} 个对象</p>`;
+        } else if (result.type === 'video' || result.type === 'rtsp') {
+            let videoHtml = '';
+            if (result.video_url) {
+                videoHtml = `
+                    <div class="mb-3">
+                        <video controls class="img-fluid" preload="metadata">
+                            <source src="${result.video_url}" type="video/mp4">
+                            您的浏览器不支持视频播放。
+                        </video>
+                    </div>
+                `;
+            } else {
+                videoHtml = `
+                    <div class="alert alert-warning" role="alert">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        视频文件生成失败，请检查RTSP流地址是否正确。
+                    </div>
+                `;
+            }
+
+            resultHtml = videoHtml + `
+                <div>
+                    <h5>推理统计信息</h5>
+                    <ul class="list-unstyled">
+                        <li>处理帧数: ${result.processed_frames}</li>
+                        <li>视频帧率: ${result.fps}</li>
+            `;
+
+            if (result.type === 'video') {
+                resultHtml += `<li>总帧数: ${result.total_frames}</li>`;
+            }
+
+            if (result.error_message) {
+                resultHtml += `<li class="text-danger">错误信息: ${result.error_message}</li>`;
+            }
+
+            resultHtml += `
+                    </ul>
+                </div>
+            `;
+        } else {
+            resultHtml = `
+                <div class="alert alert-info">
+                    <h5><i class="fas fa-info-circle"></i> 推理完成</h5>
+                    <p>推理已完成，类型: ${result.type}</p>
+                </div>
+            `;
+        }
+
+        document.getElementById('inferenceResult').innerHTML = resultHtml;
+        document.getElementById('inferenceResult').style.display = 'block';
+    }
+
     // 页面加载完成后初始化
-    $(function(){
+    $(function () {
         initializeInferencePage();
+        // 综合推理按钮
+        document.getElementById('complexReasoningBtn').addEventListener('click', function () {
+            switchReasoningType('complex');
+        });
+
+        // 素材推理按钮
+        document.getElementById('materialReasoningBtn').addEventListener('click', function () {
+            switchReasoningType('material');
+        });
+
+        // 页面初始化：默认选中综合推理
+        switchReasoningType('complex');
+
+
+        // 开始推理
+        document.getElementById('runInference').addEventListener('click', function () {
+            console.log("开始综合推理")
+            const modelType = document.querySelector('input[name="modelType"]:checked').value;
+            const inferenceType = document.querySelector('input[name="inferenceType"]:checked').value;
+            const systemModelSelect = document.getElementById('systemModelSelect');
+            const modelFileInput = document.getElementById('modelFile');
+            const uploadedModelSelect = document.getElementById('uploadedModelSelect');
+            const existingModelSelect = document.getElementById('existingModelSelect');
+            const imageFileInput = document.getElementById('imageFile');
+            const videoFileInput = document.getElementById('videoFile');
+            const rtspUrlInput = document.getElementById('rtspUrl');
+
+            // 验证输入
+            if (modelType === 'system' && !systemModelSelect.value) {
+                alert('请选择系统模型');
+                return;
+            }
+
+            if (modelType === 'upload' && !modelFileInput.files.length) {
+                alert('请上传模型文件');
+                return;
+            }
+
+            if (modelType === 'uploaded' && !uploadedModelSelect.value) {
+                alert('请选择已上传模型');
+                return;
+            }
+
+            if (modelType === 'existing' && !existingModelSelect.value) {
+                alert('请选择已存在模型');
+                return;
+            }
+
+            if (inferenceType === 'image' && !imageFileInput.files.length) {
+                alert('请选择图片文件');
+                return;
+            }
+
+            if (inferenceType === 'video' && !videoFileInput.files.length) {
+                alert('请选择视频文件');
+                return;
+            }
+
+            if ((inferenceType === 'rtsp' || inferenceType === 'rtsp_stream') && !rtspUrlInput.value.trim()) {
+                alert('请输入RTSP流地址');
+                return;
+            }
+            // 如果是RTSP实时流，跳转到专门的实时流页面
+            if (inferenceType === 'rtsp_stream') {
+                const rtspUrl = encodeURIComponent(rtspUrlInput.value.trim());
+                let modelParam = '';
+
+                if (modelType === 'system') {
+                    let systemModelValue = systemModelSelect.value;
+                    // 转换模型名称格式以匹配rtsp_stream页面
+                    if (systemModelValue === 'best.pt') {
+                        systemModelValue = 'best';
+                    } else if (systemModelValue === 'last.pt') {
+                        systemModelValue = 'last';
+                    }
+                    modelParam = `&system_model=${encodeURIComponent(systemModelValue)}`;
+                } else if (modelType === 'uploaded') {
+                    modelParam = `&uploaded_model=${encodeURIComponent(uploadedModelSelect.value)}`;
+                } else if (modelType === 'existing') {
+                    modelParam = `&existing_model=${encodeURIComponent(existingModelSelect.value)}`;
+                }
+
+                const streamUrl = `{{ url_for('main.rtsp_stream_page', project_id=project.id) }}?rtsp_url=${rtspUrl}&model_type=${modelType}${modelParam}`;
+                window.open(streamUrl, '_blank');
+                return;
+            }
+
+            // 显示加载状态
+            document.getElementById('inferenceResult').style.display = 'none';
+            document.getElementById('inferenceLoading').style.display = 'block';
+
+            // 构建表单数据
+            const formData = new FormData();
+            formData.append('model_type', modelType);
+            formData.append('inference_type', inferenceType);
+
+            if (modelType === 'system') {
+                formData.append('system_model', systemModelSelect.value);
+            } else if (modelType === 'upload') {
+                formData.append('model_file', modelFileInput.files[0]);
+            } else if (modelType === 'uploaded') {
+                formData.append('uploaded_model', uploadedModelSelect.value);
+            } else if (modelType === 'existing') {
+                formData.append('existing_model', existingModelSelect.value);
+            }
+
+            if (inferenceType === 'image') {
+                formData.append('image_file', imageFileInput.files[0]);
+            } else if (inferenceType === 'video') {
+                formData.append('video_file', videoFileInput.files[0]);
+            } else if (inferenceType === 'rtsp') {
+                formData.append('rtsp_url', rtspUrlInput.value.trim());
+            }
+            console.log("推理参数", formData)
+
+            // 发送请求
+            fetch('{{ url_for("main.run_inference_complex", project_id=project.id) }}', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(response => {
+                    document.getElementById('inferenceLoading').style.display = 'none';
+                    if (response.success) {
+                        displayInferenceResult(response.result);
+                    } else {
+                        document.getElementById('inferenceResult').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h5><i class="fas fa-exclamation-triangle"></i> 推理失败</h5>
+                        <p>${response.error}</p>
+                    </div>
+                `;
+                        document.getElementById('inferenceResult').style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('inferenceLoading').style.display = 'none';
+                    document.getElementById('inferenceResult').innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-triangle"></i> 请求失败</h5>
+                    <p>${error}</p>
+                </div>
+            `;
+                    document.getElementById('inferenceResult').style.display = 'block';
+                });
+        });
     });
-        
+
 
 </script>
 {% endblock %}

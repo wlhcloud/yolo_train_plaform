@@ -225,18 +225,19 @@ class InferenceManager:
         except Exception as e:
             raise ValueError(f"模型加载失败: {str(e)}")
 
-    def inference_image(self, model, image_path):
+    def inference_image(self, model, image_file):
         temp_dir = tempfile.mkdtemp()
-
-        plot_engine = PlotEngine(
-            model=model,
-            labels_target_map=self.labels_target_map,
-            area_annotations=self.area_annotations,
-            region_label_map=self.region_label_map,
-            font_path=font_path,
-        )
-
         try:
+            # 保存上传的图片
+            image_path = os.path.join(temp_dir, image_file.filename)
+            image_file.save(image_path)
+            plot_engine = PlotEngine(
+                model=model,
+                labels_target_map=self.labels_target_map,
+                area_annotations=self.area_annotations,
+                region_label_map=self.region_label_map,
+                font_path=font_path,
+            )
             # 推理
             result = model.predict(image_path)[0]
 
@@ -279,19 +280,22 @@ class InferenceManager:
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-    def inference_video(self, model, video_path):
+    def inference_video(self, model, video_file):
         log.info(f"开始推理视频----{self.material.id}:{video_path}")
         temp_dir = tempfile.mkdtemp()
-
-        plot_engine = PlotEngine(
-            model=model,
-            labels_target_map=self.labels_target_map,
-            area_annotations=self.area_annotations,
-            region_label_map=self.region_label_map,
-            font_path=font_path,
-        )
-
         try:
+            # 保存上传的视频
+            video_filename = video_file.filename
+            video_path = os.path.join(temp_dir, video_filename)
+            video_file.save(video_path)
+
+            plot_engine = PlotEngine(
+                model=model,
+                labels_target_map=self.labels_target_map,
+                area_annotations=self.area_annotations,
+                region_label_map=self.region_label_map,
+                font_path=font_path,
+            )
             cap = cv2.VideoCapture(video_path)
             video_filename = os.path.basename(video_path)
 

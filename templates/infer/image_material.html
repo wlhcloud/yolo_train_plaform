@@ -1,10 +1,3 @@
-<!-- Bootstrap CSS -->
-<script src="/static/js/jquery-2.1.4.min.js"></script>
-<link href="/static/css/bootstrap.min.css" rel="stylesheet">
-<script src="/static/js/layer/layer.js"></script>
-<!-- Font Awesome -->
-<link rel="stylesheet" href="/static/css/all.min.css">
-<script src="/static/js/bootstrap.bundle.min.js"></script>
 {% block extra_css %}
 <style>
     /* 通用表格样式，保持项目一致性 */
@@ -95,8 +88,8 @@
                 <i class="fas fa-server"></i> 从服务器解析
             </button>
 
-            <button type="button" class="btn btn-primary" onclick="openUploadLocalModal()" id="uploadLocalBtn" data-bs-toggle="modal"
-                >
+            <button type="button" class="btn btn-primary" onclick="openUploadLocalModal()" id="uploadLocalBtn"
+                data-bs-toggle="modal">
                 <i class="fas fa-upload"></i> 上传
             </button>
         </div>
@@ -212,7 +205,7 @@
 </div>
 
 <!-- 上传本地图片弹窗 -->
-<div class="" style="display: none;" id="uploadModal" >
+<div class="" style="display: none;" id="uploadModal">
     <div class="modal-dialog modal-lg" style="padding:20px;">
         <div class="modal-content">
             <div class="modal-body">
@@ -228,8 +221,9 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary"  onclick="layer.closeAll()">取消</button>
-                <button type="button" class="btn btn-primary" onclick="submitUpload()"   style="margin-left:5px;">开始上传</button>
+                <button type="button" class="btn btn-secondary" onclick="layer.closeAll()">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitUpload()"
+                    style="margin-left:5px;">开始上传</button>
             </div>
         </div>
     </div>
@@ -242,29 +236,29 @@
 
     function openResultModal(projectId, materialId) {
         layer.open({
-            title:"推理结果详情",
-            type: 2, 
+            title: "推理结果详情",
+            type: 2,
             area: ['80%', '90%'],
             content: `/api/inference/${projectId}/result/${materialId}` //这里content是一个普通的String
         });
     }
 
-    function openUploadLocalModal(){
+    function openUploadLocalModal() {
         layer.open({
-            title:"上传本地图片",
-            type: 1, 
+            title: "上传本地图片",
+            type: 1,
             area: ['500px', '350px'],
             content: $("#uploadModal") //这里content是一个普通的String
         });
     }
     function openServerFileModal() {
-const typeInput = document.querySelector("#serverPathForm input[name='type']");
+        const typeInput = document.querySelector("#serverPathForm input[name='type']");
         typeInput.value = "image";  // 给它赋值
         layer.open({
-            title:"从服务器解析目录",
-        type: 1, 
-        area: ['400px', '230px'],
-        content: $("#serverPathModal") //这里content是一个普通的String
+            title: "从服务器解析目录",
+            type: 1,
+            area: ['400px', '230px'],
+            content: $("#serverPathModal") //这里content是一个普通的String
         });
 
         // window.parent.postMessage({
@@ -275,42 +269,42 @@ const typeInput = document.querySelector("#serverPathForm input[name='type']");
     }
 
 
-     // 提交上传按钮事件
-        function submitUpload() {
-            const form = document.getElementById('imageUploadForm');
-            const formData = new FormData(form);
+    // 提交上传按钮事件
+    function submitUpload() {
+        const form = document.getElementById('imageUploadForm');
+        const formData = new FormData(form);
 
-            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 上传中...';
-            this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 上传中...';
+        this.disabled = true;
 
-            fetch('{{ url_for("main.upload_images_material", project_id=project.id) }}', {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.json())
-                .then(response => {
-                    if (response.success) {
-                        layer.msg('上传成功！')
-                        setTimeout(() => {
-                            location.reload()
-                        }, 2000)
-                    } else {
-                        layer.msg('上传失败！')
-                    }
-                })
-                .catch(error => {
-                    console.log('上传图片失败：', error)
+        fetch('{{ url_for("main.upload_images_material", project_id=project.id) }}', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(response => {
+                if (response.success) {
+                    layer.msg('上传成功！')
+                    setTimeout(() => {
+                        location.reload()
+                    }, 2000)
+                } else {
                     layer.msg('上传失败！')
-                })
-                .finally(() => {
-                    this.innerHTML = '<i class="fas fa-upload"></i> 开始上传';
-                    layer.closeAll()
-                    this.disabled = false;
-                    form.reset();
-                })
-        }
+                }
+            })
+            .catch(error => {
+                console.log('上传图片失败：', error)
+                layer.msg('上传失败！')
+            })
+            .finally(() => {
+                this.innerHTML = '<i class="fas fa-upload"></i> 开始上传';
+                layer.closeAll()
+                this.disabled = false;
+                form.reset();
+            })
+    }
 
-    $(function() {
+    $(function () {
         const perPageSelect = document.getElementById('perPageSelect');
         // 监听每页显示数量变化
         perPageSelect.addEventListener('change', function () {

@@ -1231,6 +1231,67 @@ def run_inference(project_id):
         return jsonify({"success": False, "message": error_msg}), 500
 
 
+@main.route("/project/<int:project_id>/inference/runInferenceComplex", methods=["POST"])
+def run_inference_complex(project_id):
+    """执行模型推理"""
+    project = Project.query.get_or_404(project_id)
+
+    try:
+        # 获取表单数据
+        model_type = request.form.get("model_type")
+        inference_type = request.form.get("inference_type")
+        system_model = request.form.get("system_model")
+        uploaded_model = request.form.get("uploaded_model")
+        existing_model = request.form.get("existing_model")
+
+        # 获取上传的文件
+        model_file = request.files.get("model_file")
+        image_file = request.files.get("image_file")
+        video_file = request.files.get("video_file")
+        rtsp_url = request.form.get("rtsp_url")
+
+        # 创建推理管理器
+        inference_manager = InferenceManager(project_id)
+
+        # 加载模型
+        if model_type == "uploaded":
+            model = inference_manager.load_model("uploaded", model_file=uploaded_model)
+        else:
+            model = inference_manager.load_model(
+                model_type, system_model, model_file, existing_model
+            )
+
+        # 根据推理类型执行推理
+        if inference_type == "image":
+            if not image_file or image_file.filename == "":
+                return jsonify({"success": False, "error": "未选择图片文件"})
+
+            result = inference_manager.inference_image(model, image_file)
+            return jsonify({"success": True, "result": result})
+
+        elif inference_type == "video":
+            if not video_file or video_file.filename == "":
+                return jsonify({"success": False, "error": "未选择视频文件"})
+
+            result = inference_manager.inference_video(model, video_file)
+            return jsonify({"success": True, "result": result})
+
+        elif inference_type == "rtsp":
+            if not rtsp_url:
+                return jsonify({"success": False, "error": "RTSP地址不能为空"})
+
+            result = inference_manager.inference_rtsp(model, rtsp_url)
+            return jsonify({"success": True, "result": result})
+
+        else:
+            return jsonify(
+                {"success": False, "error": f"不支持的推理类型: {inference_type}"}
+            )
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
 # Flask后端示例：停止推理接口
 @main.route("/project/<int:project_id>/stop_inference", methods=["POST"])
 def stop_inference(project_id):
@@ -3008,6 +3069,11 @@ def api_inference_material_page(project_id):
         materials=materials,
         pagination=pagination,
     )
+
+
+@main.route("/api/inference/complex/reasoning")
+def api_complex_reasoning_page():
+    return render_template("/infer/complex_reasoning.html")
 
 
 @main.route("/api/inference/<int:project_id>/start", methods=["GET"])

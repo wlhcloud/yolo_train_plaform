@@ -846,13 +846,13 @@
                             rtspStatus.innerHTML = '<span class="status-indicator status-running"></span> 运行中';
                             startRtspBtn.innerHTML = '<i class="fas fa-play"></i> 正在运行';
 
-
                             startRtspBtn.disabled = true;
                             stopRtspBtn.disabled = false;
                         } else {
                             rtspStatus.innerHTML = '<span class="status-indicator status-stopped"></span> 已停止';
                             startRtspBtn.disabled = false;
                             stopRtspBtn.disabled = true;
+                            startRtspBtn.innerHTML = '<i class="fas fa-play"></i> 开始截图（自动）';
                         }
 
                         // 更新计数

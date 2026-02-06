@@ -1,0 +1,128 @@
+{% block extra_css %}
+<style>
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-4">
+
+    <form id="inferenceForm">
+        <div class="mb-3">
+            <label class="form-label">推理类型</label>
+            <div style="display: flex;justify-content: space-evenly;">
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="inferenceType" id="imageInference" value="image"
+                        checked>
+                    <label class="form-check-label" for="imageInference">
+                        图片推理
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="inferenceType" id="videoInference" value="video">
+                    <label class="form-check-label" for="videoInference">
+                        视频推理
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="inferenceType" id="rtspInference" value="rtsp">
+                    <label class="form-check-label" for="rtspInference">
+                        RTSP推理 (保存视频)
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="inferenceType" id="rtspStream"
+                        value="rtsp_stream">
+                    <label class="form-check-label" for="rtspStream">
+                        RTSP实时流推理
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div id="imageInput" class="mb-3">
+            <label for="imageFile" class="form-label">选择图片</label>
+            <input class="form-control" type="file" id="imageFile" accept="image/*">
+        </div>
+
+        <div id="videoInput" class="mb-3" style="display: none;">
+            <label for="videoFile" class="form-label">选择视频</label>
+            <input class="form-control" type="file" id="videoFile" accept="video/*">
+        </div>
+
+        <div id="rtspInput" class="mb-3" style="display: none;">
+            <label for="rtspUrl" class="form-label">RTSP流地址</label>
+            <input class="form-control" type="text" id="rtspUrl" placeholder="rtsp://username:password@ip:port/path">
+        </div>
+    </form>
+
+
+    <div class="card">
+        <div class="card-header">
+            <i class="fas fa-eye me-1"></i>推理结果
+        </div>
+        <div class="card-body">
+            <div id="inferenceResult" class="text-center">
+                <div class="py-5">
+                    <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">等待推理结果</h4>
+                    <p class="text-muted">选择模型和推理选项，然后点击开始推理</p>
+                </div>
+            </div>
+            <div id="inferenceLoading" class="text-center" style="display: none;">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">推理中...</span>
+                </div>
+                <p class="mt-2">推理中，请稍候...</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(function () {
+        // 推理类型切换
+        const inferenceTypeRadios = document.querySelectorAll('input[name="inferenceType"]');
+        inferenceTypeRadios.forEach(radio => {
+            radio.addEventListener('change', function () {
+                document.getElementById('imageInput').style.display = 'none';
+                document.getElementById('videoInput').style.display = 'none';
+                document.getElementById('rtspInput').style.display = 'none';
+
+                if (this.value === 'image') {
+                    document.getElementById('imageInput').style.display = 'block';
+                } else if (this.value === 'video') {
+                    document.getElementById('videoInput').style.display = 'block';
+                } else if (this.value === 'rtsp' || this.value === 'rtsp_stream') {
+                    document.getElementById('rtspInput').style.display = 'block';
+                }
+            });
+        });
+
+        // 初始化时根据选中的推理类型显示相应选项
+        const checkedInferenceType = document.querySelector('input[name="inferenceType"]:checked');
+        if (checkedInferenceType) {
+            document.getElementById('imageInput').style.display = 'none';
+            document.getElementById('videoInput').style.display = 'none';
+            document.getElementById('rtspInput').style.display = 'none';
+
+            if (checkedInferenceType.value === 'image') {
+                document.getElementById('imageInput').style.display = 'block';
+            } else if (checkedInferenceType.value === 'video') {
+                document.getElementById('videoInput').style.display = 'block';
+            } else if (checkedInferenceType.value === 'rtsp' || checkedInferenceType.value === 'rtsp_stream') {
+                document.getElementById('rtspInput').style.display = 'block';
+            }
+        } else {
+            // 默认显示图片输入
+            document.getElementById('imageInput').style.display = 'block';
+            document.getElementById('videoInput').style.display = 'none';
+            document.getElementById('rtspInput').style.display = 'none';
+        }
+    });
+
+</script>
+{% endblock %}
