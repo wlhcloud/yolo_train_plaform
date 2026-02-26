@@ -189,10 +189,10 @@
                                 <button class="btn btn-sm btn-outline-primary" id="materialReasoningBtn">
                                     <i class="fas fa-cog"></i>素材推理
                                 </button>
-                                <!-- <button class="btn btn-sm btn-primary" onclick="startInference('{{ project.id }}',null)"
-                                    id="startInferenceBtn">
+                                <button type="button" class="btn btn-sm btn-primary"
+                                    onclick="startInference('{{ project.id }}',null)" id="startInferenceBtn">
                                     <i class="fas fa-play"></i> 开始推理
-                                </button> -->
+                                </button>
                                 <button type="button" class="btn btn-sm btn-primary" id="runInference">
                                     <i class="fas fa-play me-1"></i>开始推理
                                 </button>
@@ -313,6 +313,8 @@
         const complexIframe = document.getElementById('inferenceComplexIframe');
         const materialBtn = document.getElementById('materialReasoningBtn');
         const complexBtn = document.getElementById('complexReasoningBtn');
+        const startInferenceBtn = document.getElementById('startInferenceBtn'); // 素材推理
+        const runInference = document.getElementById('runInference');
 
         // 重置按钮样式
         materialBtn.classList.remove('btn-primary');
@@ -322,12 +324,16 @@
 
         if (type === 'complex') {
             // 显示综合推理，隐藏素材推理
+            startInferenceBtn.style.display = "inline-block"
+            runInference.style.display = "none"
             complexIframe.style.display = 'block';
             materialIframe.style.display = 'none';
             complexBtn.classList.remove('btn-outline-primary');
             complexBtn.classList.add('btn-primary');
         } else if (type === 'material') {
             // 显示素材推理，隐藏综合推理
+            startInferenceBtn.style.display = "none"
+            runInference.style.display = "inline-block"
             materialIframe.style.display = 'block';
             complexIframe.style.display = 'none';
             materialBtn.classList.remove('btn-outline-primary');
@@ -684,6 +690,7 @@
 
     // 显示推理结果
     function displayInferenceResult(result) {
+        console.log("推理结果：", result)
         let resultHtml = '';
         if (result.type === 'image') {
             resultHtml = `
@@ -715,17 +722,37 @@
                 `;
             }
 
+            // resultHtml = videoHtml + `
+            //     <div>
+            //         <h5>推理统计信息</h5>
+            //         <ul class="list-unstyled">
+            //             <li>处理帧数: ${result.processed_frames}</li>
+            //             <li>视频帧率: ${result.fps}</li>
+            // `;
+            let classCountsHtml = '';
+            // 遍历 class_counts 对象（兼容字典/对象格式）
+            if (result.class_counts && Object.keys(result.class_counts).length > 0) {
+                for (const [className, count] of Object.entries(result.class_counts)) {
+                    classCountsHtml += `<li>${className}：${count} 个</li>`;
+                }
+            } else {
+                classCountsHtml = '<li>暂无分类统计数据</li>';
+            }
+            // 拼接最终的 resultHtml（替换你原来的写法）
             resultHtml = videoHtml + `
                 <div>
                     <h5>推理统计信息</h5>
                     <ul class="list-unstyled">
-                        <li>处理帧数: ${result.processed_frames}</li>
-                        <li>视频帧率: ${result.fps}</li>
+                        <li><strong>分类统计：</strong></li>
+                        ${classCountsHtml}  <!-- 插入循环生成的分类统计 -->
+                        <li><strong>检测总数：</strong> ${result.total_count || 0}</li>
+                    </ul>
+                </div>
             `;
 
-            if (result.type === 'video') {
-                resultHtml += `<li>总帧数: ${result.total_frames}</li>`;
-            }
+            // if (result.type === 'video') {
+            //     resultHtml += `<li>总帧数: ${result.total_frames}</li>`;
+            // }
 
             if (result.error_message) {
                 resultHtml += `<li class="text-danger">错误信息: ${result.error_message}</li>`;

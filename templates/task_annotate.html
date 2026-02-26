@@ -111,10 +111,10 @@
     <div class="col-10">
         <!-- 任务操作按钮组（参考图片管理多选操作按钮） -->
         <div class="task-action-buttons" style="margin-bottom: 1rem;">
-            <button class="btn btn-primary"  onclick="openTaskModal()">
+            <button class="btn btn-primary" onclick="openTaskModal()">
                 <i class="fas fa-plus"></i> 新增标注任务
             </button>
-            <button class="btn btn-primary"  onclick="submitSelectedTask()">
+            <button class="btn btn-primary" onclick="submitSelectedTask()">
                 <i class="fas fa-upload"></i> 提交
             </button>
         </div>
@@ -267,9 +267,13 @@
                     <h4 class="text-muted">暂无标注任务</h4>
                     <p class="text-muted">点击右上角按钮创建第一个标注任务</p>
                     <p class="text-muted">
+                        {% if images and images|length > 0 %}
                         <a href="{{ url_for('main.annotate_image', project_id=project.id,image_id=images[0].id) }}">
                             不建任务，直接标注
                         </a>
+                        {% else %}
+                        <span class="text-secondary">暂无图片可标注，请先上传图片</span>
+                        {% endif %}
                     </p>
                 </div>
                 {% endif %}
@@ -279,8 +283,8 @@
 </div>
 
 <!-- 新增/编辑标注任务模态框 -->
-<div  id="addTaskModal" style="display: none;">
-    <div class="modal-dialog modal-lg"  style="padding:20px;">
+<div id="addTaskModal" style="display: none;">
+    <div class="modal-dialog modal-lg" style="padding:20px;">
         <div class="modal-content">
             <div class="modal-body">
                 <form id="taskForm">
@@ -341,7 +345,8 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="layer.closeAll()">取消</button>
-                <button type="button" class="btn btn-primary"  onclick="submitTask()" style="margin-left:5px;">提交</button>
+                <button type="button" class="btn btn-primary" onclick="submitTask()"
+                    style="margin-left:5px;">提交</button>
             </div>
         </div>
     </div>
@@ -412,7 +417,7 @@
                 // 填充待标注素材列表
                 buildTaskItemList(task.task_items);
 
-               openTaskModal();
+                openTaskModal();
             })
             .catch(error => {
                 const errorMsg = error.message || '获取任务详情失败，请重试';
@@ -426,10 +431,10 @@
     }
 
 
-    function openTaskModal(){
+    function openTaskModal() {
         layer.open({
-            title:"新增标注任务",
-            type: 1, 
+            title: "新增标注任务",
+            type: 1,
             area: ['600px', '550px'],
             content: $("#addTaskModal") //这里content是一个普通的String
         });
@@ -488,10 +493,10 @@
     }
 
 
-    function openTaskModal(){
+    function openTaskModal() {
         layer.open({
-            title:"新增标注任务",
-            type: 1, 
+            title: "新增标注任务",
+            type: 1,
             area: ['600px', '550px'],
             content: $("#addTaskModal") //这里content是一个普通的String
         });
@@ -514,8 +519,8 @@
         // };
 
         layer.open({
-            title:"标注",
-            type: 2, 
+            title: "标注",
+            type: 2,
             area: ['90%', '90%'],
             content: `/api/task-annotation/${projectId}/image/${currentTaskId}` //这里content是一个普通的String
         });
@@ -742,8 +747,8 @@
             taskAnnotateItemList.appendChild(row);
             index += 1;
         });
-        
-            layer.close(annotation_index___);
+
+        layer.close(annotation_index___);
     }
 
 
@@ -823,12 +828,12 @@
             window.location.reload();
         }
     }
-var annotation_index___ ;
+    var annotation_index___;
     /** 打开选择素材模态框 */
     function openMaterialModal() {
-       annotation_index___ =  layer.open({
-            title:"选择标注素材",
-            type: 2, 
+        annotation_index___ = layer.open({
+            title: "选择标注素材",
+            type: 2,
             area: ['90%', '90%'],
             content: `/api/task-annotation/${projectId}/image-list` //这里content是一个普通的String
         });

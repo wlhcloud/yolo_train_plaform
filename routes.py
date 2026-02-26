@@ -497,11 +497,6 @@ def annotate(project_id, page=1, per_page=10):
     project = Project.query.get_or_404(project_id)
     images = Image.query.filter_by(project_id=project_id).all()
 
-    # 如果没有图片，重定向到图片上传页面
-    if not images:
-        flash("请先上传图片再进行标注", "warning")
-        return redirect(url_for("main.images_upload", project_id=project_id))
-
     task_annotate_list = AnnotationTask.query.filter_by(project_id=project_id)
 
     task_annotate_pagination = task_annotate_list.order_by(
@@ -1267,6 +1262,7 @@ def run_inference_complex(project_id):
                 return jsonify({"success": False, "error": "未选择图片文件"})
 
             result = inference_manager.inference_image(model, image_file)
+            result["detections"] = None
             return jsonify({"success": True, "result": result})
 
         elif inference_type == "video":
@@ -1367,7 +1363,7 @@ def get_inference_status(project_id):
         )
 
     # 3. 任务不存在
-    return jsonify({"success": False, "message": "任务不存在"}), 404
+    return jsonify({"success": True, "message": "任务不存在"}), 200
 
 
 @main.route("/api/project/<int:project_id>/images/delete_selected", methods=["POST"])

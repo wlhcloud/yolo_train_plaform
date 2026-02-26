@@ -332,7 +332,7 @@ class InferenceManager:
         return converted_results
 
     def inference_video(self, model, video_file):
-        log.info(f"开始推理视频----{self.material.id}:{video_path}")
+        log.info(f"开始推理视频----")
         temp_dir = tempfile.mkdtemp()
         try:
             # 保存上传的视频
