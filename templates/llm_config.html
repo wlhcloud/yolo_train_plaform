@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,16 +11,20 @@
         .config-card {
             transition: transform 0.2s;
         }
+
         .config-card:hover {
             transform: translateY(-2px);
         }
+
         .active-config {
             border: 2px solid #28a745;
             background-color: #f8fff9;
         }
+
         .password-field {
             position: relative;
         }
+
         .password-toggle {
             position: absolute;
             right: 10px;
@@ -30,6 +35,7 @@
         }
     </style>
 </head>
+
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
@@ -47,7 +53,8 @@
             <div class="col-12">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h2><i class="fas fa-brain me-2"></i>大模型配置</h2>
-                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#configModal">
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#configModal"
+                        onclick="openConfigModal()">
                         <i class="fas fa-plus me-2"></i>添加配置
                     </button>
                 </div>
@@ -76,21 +83,48 @@
                             <input type="text" class="form-control" id="configName" required>
                         </div>
                         <div class="mb-3">
-                            <label for="baseUrl" class="form-label">Base URL</label>
-                            <input type="url" class="form-control" id="baseUrl" placeholder="https://api.openai.com/v1" required>
-                            <div class="form-text">OpenAI兼容的API基础URL</div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="apiKey" class="form-label">API Key</label>
-                            <div class="password-field">
-                                <input type="password" class="form-control" id="apiKey">
-                                <i class="fas fa-eye password-toggle" onclick="togglePassword('apiKey')"></i>
+                            <label class="form-label">模型类型</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="modelType" id="generalModel"
+                                    value="general" checked>
+                                <label class="form-check-label" for="generalModel">
+                                    通用大模型
+                                </label>
                             </div>
-                            <div class="form-text">对于Ollama等本地模型，API Key可以为空</div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="modelType" id="visionModel"
+                                    value="vision">
+                                <label class="form-check-label" for="visionModel">
+                                    视觉模型
+                                </label>
+                            </div>
+                        </div>
+                        <!-- 视觉模型专属上传区域（默认隐藏） -->
+                        <div class="mb-3" id="visionModelUploadArea" style="display: none;">
+                            <label for="visionModelFile" class="form-label">视觉模型文件</label>
+                            <input type="file" class="form-control" id="visionModelFile" accept=".pt">
+                            <div class="form-text">仅视觉模型需上传，支持 .pt 格式</div>
+                        </div>
+                        <div id="generalModelConfigArea">
+                            <div class="mb-3">
+                                <label for="baseUrl" class="form-label">Base URL</label>
+                                <input type="url" class="form-control" id="baseUrl"
+                                    placeholder="https://api.openai.com/v1" required>
+                                <div class="form-text">OpenAI兼容的API基础URL</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="apiKey" class="form-label">API Key</label>
+                                <div class="password-field">
+                                    <input type="password" class="form-control" id="apiKey">
+                                    <i class="fas fa-eye password-toggle" onclick="togglePassword('apiKey')"></i>
+                                </div>
+                                <div class="form-text">对于Ollama等本地模型，API Key可以为空</div>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label for="modelName" class="form-label">模型名称</label>
-                            <input type="text" class="form-control" id="modelName" placeholder="gpt-4-vision-preview" required>
+                            <input type="text" class="form-control" id="modelName" placeholder="gpt-4-vision-preview"
+                                required>
                             <div class="form-text">支持视觉功能的模型名称</div>
                         </div>
                     </form>
@@ -106,9 +140,47 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // 页面加载时获取配置列表
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             loadConfigs();
+
+            // 获取单选按钮和上传区域
+            const generalModelRadio = document.getElementById('generalModel');
+            const visionModelRadio = document.getElementById('visionModel');
+
+            // 绑定事件
+            generalModelRadio.addEventListener('change', handleModelTypeChange);
+            visionModelRadio.addEventListener('change', handleModelTypeChange);
+
+            // 初始化时执行一次（确保默认状态正确）
+            handleModelTypeChange();
         });
+
+        function openConfigModal() {
+            const visionModelRadio = document.getElementById('visionModel');
+            visionModelRadio.checked = false
+            handleModelTypeChange()
+        }
+
+        // 切换事件处理
+        function handleModelTypeChange() {
+            const visionModelRadio = document.getElementById('visionModel');
+            const visionUploadArea = document.getElementById('visionModelUploadArea');
+            const generalModelArea = document.getElementById('generalModelConfigArea')
+            const visionModelFile = document.getElementById('visionModelFile');
+
+            if (visionModelRadio.checked) {
+                // 选中视觉模型：显示上传区域，并设为必填
+                visionUploadArea.style.display = 'block';
+                generalModelArea.style.display = 'none'
+                visionModelFile.required = true;
+            } else {
+                // 选中通用大模型：隐藏上传区域，取消必填
+                visionUploadArea.style.display = 'none';
+                generalModelArea.style.display = 'block'
+
+                visionModelFile.required = false;
+            }
+        }
 
         // 加载配置列表
         function loadConfigs() {
@@ -152,10 +224,13 @@
                                 ${config.is_active ? '<span class="badge bg-success">当前激活</span>' : ''}
                             </div>
                             <p class="card-text small text-muted mb-2">
-                                <i class="fas fa-link me-1"></i>${config.base_url}
+                                <i class="fas fa-link me-1"></i>${config.model_type == 'general' ? config.base_url : config.model_path}
                             </p>
                             <p class="card-text small text-muted mb-3">
                                 <i class="fas fa-robot me-1"></i>${config.model}
+                            </p>
+                            <p class="card-text small text-muted mb-3">
+                                <i class="fas fa-link me-1"></i>${config.model_type == 'general' ? "通用大模型" : '视觉模型'}
                             </p>
                             <div class="btn-group w-100" role="group">
                                 ${!config.is_active ? `<button class="btn btn-outline-success btn-sm" onclick="activateConfig(${config.id})">激活</button>` : ''}
@@ -172,7 +247,7 @@
         function togglePassword(fieldId) {
             const field = document.getElementById(fieldId);
             const toggle = field.nextElementSibling;
-            
+
             if (field.type === 'password') {
                 field.type = 'text';
                 toggle.classList.remove('fa-eye');
@@ -187,38 +262,54 @@
         // 保存配置
         function saveConfig() {
             const configId = document.getElementById('configId').value;
-            const formData = {
-                name: document.getElementById('configName').value,
-                base_url: document.getElementById('baseUrl').value,
-                api_key: document.getElementById('apiKey').value,
-                model: document.getElementById('modelName').value
-            };
+            const visionModelRadio = document.getElementById('visionModel');
+            if (visionModelRadio.checked) {
+                model_type = 'vision'
+            } else {
+                model_type = 'general'
+            }
+            const formData = new FormData();
+            formData.append('model_type', model_type)
+            if (model_type == 'general') {
+                formData.append('name', document.getElementById('configName').value)
+                formData.append('base_url', document.getElementById('baseUrl').value)
+                formData.append('api_key', document.getElementById('apiKey').value)
+                formData.append('model', document.getElementById('modelName').value)
+            } else {
+                const modelFileInput = document.getElementById('visionModelFile');
+                if (!modelFileInput.files.length) {
+                    layer.msg('请上传模型文件');
+                    return;
+                }
+
+                formData.append('name', document.getElementById('configName').value)
+                formData.append('model_file', modelFileInput.files[0])
+                formData.append('model', document.getElementById('modelName').value)
+            }
+
 
             const url = configId ? `/api/llm-configs/${configId}` : '/api/llm-configs';
             const method = configId ? 'PUT' : 'POST';
 
             fetch(url, {
                 method: method,
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(formData)
+                body: formData
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showAlert(configId ? '配置更新成功' : '配置添加成功', 'success');
-                    bootstrap.Modal.getInstance(document.getElementById('configModal')).hide();
-                    loadConfigs();
-                    resetForm();
-                } else {
-                    showAlert('保存失败: ' + data.message, 'danger');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showAlert('保存失败', 'danger');
-            });
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showAlert(configId ? '配置更新成功' : '配置添加成功', 'success');
+                        bootstrap.Modal.getInstance(document.getElementById('configModal')).hide();
+                        loadConfigs();
+                        resetForm();
+                    } else {
+                        showAlert('保存失败: ' + data.message, 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showAlert('保存失败', 'danger');
+                });
         }
 
         // 编辑配置
@@ -228,11 +319,20 @@
                 .then(data => {
                     if (data.success) {
                         const config = data.config;
+                        const visionModelRadio = document.getElementById('visionModel');
+
+                        if (config.model_type == 'general') {
+                            visionModelRadio.checked = false
+                            document.getElementById('baseUrl').value = config.base_url;
+                            document.getElementById('apiKey').value = config.api_key;
+                        } else {
+                            visionModelRadio.checked = true
+                        }
+                        handleModelTypeChange()
                         document.getElementById('configId').value = config.id;
                         document.getElementById('configName').value = config.name;
-                        document.getElementById('baseUrl').value = config.base_url;
-                        document.getElementById('apiKey').value = config.api_key;
                         document.getElementById('modelName').value = config.model;
+
                         document.getElementById('modalTitle').textContent = '编辑LLM配置';
                         new bootstrap.Modal(document.getElementById('configModal')).show();
                     } else {
@@ -250,19 +350,19 @@
             fetch(`/api/llm-configs/${configId}/activate`, {
                 method: 'POST'
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showAlert('配置激活成功', 'success');
-                    loadConfigs();
-                } else {
-                    showAlert('激活失败: ' + data.message, 'danger');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showAlert('激活失败', 'danger');
-            });
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showAlert('配置激活成功', 'success');
+                        loadConfigs();
+                    } else {
+                        showAlert('激活失败: ' + data.message, 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showAlert('激活失败', 'danger');
+                });
         }
 
         // 删除配置
@@ -271,19 +371,19 @@
                 fetch(`/api/llm-configs/${configId}`, {
                     method: 'DELETE'
                 })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showAlert('配置删除成功', 'success');
-                        loadConfigs();
-                    } else {
-                        showAlert('删除失败: ' + data.message, 'danger');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showAlert('删除失败', 'danger');
-                });
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showAlert('配置删除成功', 'success');
+                            loadConfigs();
+                        } else {
+                            showAlert('删除失败: ' + data.message, 'danger');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showAlert('删除失败', 'danger');
+                    });
             }
         }
 
@@ -303,19 +403,19 @@
                     alert.remove();
                 }
             });
-            
+
             const alertDiv = document.createElement('div');
             alertDiv.className = `alert alert-${type} alert-dismissible fade show mt-3`;
             alertDiv.innerHTML = `
                 ${message}
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             `;
-            
+
             // 尝试多种插入方式
             try {
                 const container = document.querySelector('.container');
                 const row = container ? container.querySelector('.row') : null;
-                
+
                 if (container && row) {
                     container.insertBefore(alertDiv, row);
                 } else if (container) {
@@ -334,7 +434,7 @@
                 // 如果所有方法都失败，使用简单的append
                 document.body.appendChild(alertDiv);
             }
-            
+
             setTimeout(() => {
                 try {
                     if (alertDiv && alertDiv.parentNode) {
@@ -352,4 +452,5 @@
         });
     </script>
 </body>
+
 </html>

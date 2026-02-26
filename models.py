@@ -112,9 +112,13 @@ class LLMConfig(db.Model):
     __tablename__ = "llm_config"
     __table_args__ = {"schema": "yolov8_platform"}
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)  # 配置名称
-    base_url = db.Column(db.String(500), nullable=False)  # API基础URL
-    api_key = db.Column(db.String(200), nullable=False)  # API密钥
+    name = db.Column(db.String(100), nullable=True)  # 配置名称
+    model_type = db.Column(
+        db.String(10), nullable=True
+    )  # 模型类型。general：大模型，vision：视觉模型
+    model_path = db.Column(db.String(200), nullable=True)  # 视觉模型的上传路径
+    base_url = db.Column(db.String(500), nullable=True)  # API基础URL
+    api_key = db.Column(db.String(200), nullable=True)  # API密钥
     model = db.Column(db.String(100), nullable=False)  # 模型名称
     is_active = db.Column(db.Boolean, default=False)  # 是否为当前激活配置
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

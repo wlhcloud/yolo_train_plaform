@@ -1,3 +1,5 @@
+import base64
+import io
 import os
 import posixpath
 import subprocess
@@ -180,3 +182,87 @@ def save_base64_image(base64_data, save_path):
     except Exception as e:
         print(f"保存Base64图片失败: {e}")
         return False
+
+
+def save_yolobase_model(model_file):
+    """
+    保存上传的模型文件到uploaded_models目录
+
+    Args:
+        model_file (FileStorage): 上传的模型文件
+
+    Returns:
+        str: 保存的模型文件路径
+    """
+    if not model_file or not model_file.filename:
+        raise ValueError("未提供模型文件")
+
+    filename = model_file.filename
+    # 确保文件名安全
+    from werkzeug.utils import secure_filename
+
+    filename = secure_filename(filename)
+
+    # 确保文件扩展名为.pt
+    if not filename.endswith(".pt"):
+        filename += ".pt" if "." not in filename else ""
+
+    uploaded_models_dir = os.path.join("projects", "yolo_base")
+    os.makedirs(uploaded_models_dir, exist_ok=True)
+
+    model_path = os.path.join(uploaded_models_dir, filename)
+    model_file.save(model_path)
+
+    # 确保文件已正确保存
+    if not os.path.exists(model_path):
+        raise ValueError("模型文件保存失败")
+
+    return model_path
+
+
+class CustomImageFile:
+    """
+    自定义文件对象类，完全适配原inference_image方法的需求：
+    1. 有filename属性
+    2. 支持save()方法保存到指定路径
+    """
+
+    def __init__(self, image_bytes, filename):
+        self.image_bytes = image_bytes  # 图片二进制数据
+        self.filename = filename  # 文件名（带后缀）
+        self._file = io.BytesIO(image_bytes)  # 二进制文件流
+
+        try:
+            with PILImage.open(self._file) as img:
+                self.image_size = (img.width, img.height)
+            self._file.seek(0)
+        except Exception as e:
+            raise ValueError(f"解析图片尺寸失败：{str(e)}")
+
+    def save(self, save_path):
+        with open(save_path, "wb") as f:
+            f.write(self.image_bytes)
+
+    def close(self):
+        self._file.close()
+
+
+def base64_to_custom_image_file(base64_str, filename="inference_input.jpg"):
+    """
+    将base64字符串转换为CustomImageFile对象（适配原inference_image方法）
+    :param base64_str: 原始base64编码的图片字符串（可带data:image前缀）
+    :param filename: 自定义文件名（含后缀，如xxx.jpg/xxx.png）
+    :return: CustomImageFile对象
+    """
+    try:
+        if "," in base64_str:
+            base64_str = base64_str.split(",")[1]
+
+        image_bytes = base64.b64decode(base64_str)
+
+        PILImage.open(io.BytesIO(image_bytes)).verify()
+
+        custom_file = CustomImageFile(image_bytes, filename)
+        return custom_file
+    except Exception as e:
+        raise ValueError(f"base64转换为文件对象失败：{str(e)}")

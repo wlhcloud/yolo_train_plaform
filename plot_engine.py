@@ -20,6 +20,8 @@ class PlotEngine:
         self.area_annotations = area_annotations
         self.region_label_map = region_label_map
         self.font_path = font_path
+        # 检查框
+        self.detections = []
 
         self.tracker = ByteTrack(
             track_thresh=0.5,  # 高置信度阈值
@@ -86,6 +88,8 @@ class PlotEngine:
             x1, y1, x2, y2 = map(float, box)  # 保持浮点数
             # 创建6维检测结果: [x1, y1, x2, y2, conf, cls]
             detections.append([x1, y1, x2, y2, conf, cls])
+
+        self.detections = detections
 
         if len(detections) > 0:
             detections_np = np.array(detections, dtype=np.float32)

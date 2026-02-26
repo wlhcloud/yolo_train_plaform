@@ -36,127 +36,127 @@
 {% block content %}
 {% set current_nav_key = 'annotate'%}
 <div class="row">
-{% include "project_nav.html"%}
+    {% include "project_nav.html"%}
 
-<div class="col-10" >
-<div class="d-flex justify-content-between mb-3">
-    <div>
-        {% if images|length > 1 %}
-        {% for i in range(1, images|length) %}
-        {% if images[i].id == current_image.id %}
-        <a href="#" class="btn btn-secondary"
-            data-url="{{ url_for('main.annotate_image', project_id=project.id, image_id=images[i-1].id) }}"
-            onclick="saveAndNavigate(this.dataset.url)">
-            <i class="fas fa-arrow-left"></i> 上一张
-        </a>
-        {% endif %}
-        {% endfor %}
-        {% endif %}
-    </div>
-    <div class="d-flex align-items-center gap-2">
-        <!-- 项目级别AI辅助标注开关 -->
-        <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="projectAiAssistSwitch">
-            <label class="form-check-label" for="projectAiAssistSwitch">
-                <i class="fas fa-brain"></i> 项目AI辅助标注
-            </label>
-        </div>
-        <div id="aiAssistStatus" class="text-muted small" style="display: none;">
-            <i class="fas fa-spinner fa-spin"></i> AI识别中...
-        </div>
-        <button id="manualAiDetect" class="btn btn-info" onclick="runLLMDetection()">
-            <i class="fas fa-magic"></i> 手动AI识别
-        </button>
-        <button id="saveAnnotations" class="btn btn-success">
-            <i class="fas fa-save"></i> 保存标注
-        </button>
-    </div>
-    <div>
-        {% if images|length > 1 %}
-        {% for i in range(images|length - 1) %}
-        {% if images[i].id == current_image.id %}
-        <a href="#" class="btn btn-secondary"
-            data-url="{{ url_for('main.annotate_image', project_id=project.id, image_id=images[i + 1].id) }}"
-            onclick="saveAndNavigate(this.dataset.url)">
-            下一张 <i class="fas fa-arrow-right"></i>
-        </a>
-        {% endif %}
-        {% endfor %}
-        {% endif %}
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-md-9">
-        <div class="annotation-container">
-            <div class="canvas-container">
-                <canvas id="fabricCanvas"></canvas>
+    <div class="col-10">
+        <div class="d-flex justify-content-between mb-3">
+            <div>
+                {% if images|length > 1 %}
+                {% for i in range(1, images|length) %}
+                {% if images[i].id == current_image.id %}
+                <a href="#" class="btn btn-secondary"
+                    data-url="{{ url_for('main.annotate_image', project_id=project.id, image_id=images[i-1].id) }}"
+                    onclick="saveAndNavigate(this.dataset.url)">
+                    <i class="fas fa-arrow-left"></i> 上一张
+                </a>
+                {% endif %}
+                {% endfor %}
+                {% endif %}
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <!-- 项目级别AI辅助标注开关 -->
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="projectAiAssistSwitch">
+                    <label class="form-check-label" for="projectAiAssistSwitch">
+                        <i class="fas fa-brain"></i> 项目AI辅助标注
+                    </label>
+                </div>
+                <div id="aiAssistStatus" class="text-muted small" style="display: none;">
+                    <i class="fas fa-spinner fa-spin"></i> AI识别中...
+                </div>
+                <button id="manualAiDetect" class="btn btn-info" onclick="runLLMDetection()">
+                    <i class="fas fa-magic"></i> 手动AI识别
+                </button>
+                <button id="saveAnnotations" class="btn btn-success">
+                    <i class="fas fa-save"></i> 保存标注
+                </button>
+            </div>
+            <div>
+                {% if images|length > 1 %}
+                {% for i in range(images|length - 1) %}
+                {% if images[i].id == current_image.id %}
+                <a href="#" class="btn btn-secondary"
+                    data-url="{{ url_for('main.annotate_image', project_id=project.id, image_id=images[i + 1].id) }}"
+                    onclick="saveAndNavigate(this.dataset.url)">
+                    下一张 <i class="fas fa-arrow-right"></i>
+                </a>
+                {% endif %}
+                {% endfor %}
+                {% endif %}
             </div>
         </div>
-    </div>
-    <div class="col-md-3">
-        <div class="annotation-sidebar">
-            <!-- 标签页导航 -->
-            <ul class="nav nav-tabs mb-3" id="sidebarTabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="labels-tab" data-bs-toggle="tab" data-bs-target="#labelsPane"
-                        type="button" role="tab">标签管理</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="annotations-tab" data-bs-toggle="tab" data-bs-target="#annotationsPane"
-                        type="button" role="tab">标注框列表</button>
-                </li>
-            </ul>
 
-            <!-- 标签页内容 -->
-            <div class="tab-content" id="sidebarTabContent">
-                <!-- 标签管理面板 -->
-                <div class="tab-pane fade show active" id="labelsPane" role="tabpanel">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <button class="btn btn-sm btn-primary" data-bs-toggle="modal"
-                                data-bs-target="#addLabelModal">
-                                <i class="fas fa-plus"></i>
-                            </button>
+        <div class="row">
+            <div class="col-md-9">
+                <div class="annotation-container">
+                    <div class="canvas-container">
+                        <canvas id="fabricCanvas"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="annotation-sidebar">
+                    <!-- 标签页导航 -->
+                    <ul class="nav nav-tabs mb-3" id="sidebarTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="labels-tab" data-bs-toggle="tab"
+                                data-bs-target="#labelsPane" type="button" role="tab">标签管理</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="annotations-tab" data-bs-toggle="tab"
+                                data-bs-target="#annotationsPane" type="button" role="tab">标注框列表</button>
+                        </li>
+                    </ul>
+
+                    <!-- 标签页内容 -->
+                    <div class="tab-content" id="sidebarTabContent">
+                        <!-- 标签管理面板 -->
+                        <div class="tab-pane fade show active" id="labelsPane" role="tabpanel">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal"
+                                        data-bs-target="#addLabelModal">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                                <div class="card-body">
+                                    <div id="labelsList">
+                                        <!-- 标签将通过JS动态加载 -->
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="card-body">
-                            <div id="labelsList">
-                                <!-- 标签将通过JS动态加载 -->
+
+                        <!-- 标注框列表面板 -->
+                        <div class="tab-pane fade" id="annotationsPane" role="tabpanel">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <button id="clearAllBtn" class="btn btn-sm btn-outline-danger me-1"
+                                            onclick="clearAllAnnotations()">
+                                            <i class="fas fa-trash-alt"></i> 清空
+                                        </button>
+                                        <button id="toggleAnnotationsBtn" class="btn btn-sm btn-outline-primary"
+                                            onclick="toggleAllAnnotations()">
+                                            <i class="fas fa-eye"></i> 隐藏
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <small class="text-muted">标注框数量: <span id="annotationCount">0</span></small>
+                                    </div>
+                                    <div id="annotationsList">
+                                        <p class="text-muted">暂无标注</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <!-- 标注框列表面板 -->
-                <div class="tab-pane fade" id="annotationsPane" role="tabpanel">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <div>
-                                <button id="clearAllBtn" class="btn btn-sm btn-outline-danger me-1"
-                                    onclick="clearAllAnnotations()">
-                                    <i class="fas fa-trash-alt"></i> 清空
-                                </button>
-                                <button id="toggleAnnotationsBtn" class="btn btn-sm btn-outline-primary"
-                                    onclick="toggleAllAnnotations()">
-                                    <i class="fas fa-eye"></i> 隐藏
-                                </button>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between mb-2">
-                                <small class="text-muted">标注框数量: <span id="annotationCount">0</span></small>
-                            </div>
-                            <div id="annotationsList">
-                                <p class="text-muted">暂无标注</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
-</div>
-</div>
 </div>
 <!-- 添加标签模态框 -->
 <div class="modal fade" id="addLabelModal" tabindex="-1">

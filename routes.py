@@ -53,7 +53,7 @@ from services.reasoning_material_service import (
     ReasoningMaterialService,
     reasoning_material_service,
 )
-from utils import extract_first_frame
+from utils import base64_to_custom_image_file, extract_first_frame, save_yolobase_model
 from project_dir_manager import ProjectDirManager
 from loguru import logger as log
 
@@ -1710,6 +1710,8 @@ def api_get_llm_configs():
                     "base_url": config.base_url,
                     "model": config.model,
                     "is_active": config.is_active,
+                    "model_type": config.model_type,
+                    "model_path": config.model_path,
                     "created_at": config.created_at.isoformat(),
                 }
             )
@@ -1722,27 +1724,43 @@ def api_get_llm_configs():
 def api_create_llm_config():
     """创建LLM配置"""
     try:
-        data = request.get_json()
+        data = request.form
+        model_type = data.get("model_type")
 
-        # 验证必填字段
-        required_fields = ["name", "base_url", "model"]
-        for field in required_fields:
-            if not data.get(field):
-                return (
-                    jsonify({"success": False, "message": f"{field} 是必填字段"}),
-                    400,
-                )
+        if model_type == "general":
+            # 验证必填字段
+            required_fields = ["name", "base_url", "model"]
+            for field in required_fields:
+                if not data.get(field):
+                    return (
+                        jsonify({"success": False, "message": f"{field} 是必填字段"}),
+                        400,
+                    )
 
-        # api_key 对于本地模型（如Ollama）可以为空
-        api_key = data.get("api_key", "")
+            # api_key 对于本地模型（如Ollama）可以为空
+            api_key = data.get("api_key", "")
 
-        # 创建新配置
-        config = LLMConfig(
-            name=data["name"],
-            base_url=data["base_url"],
-            api_key=api_key,
-            model=data["model"],
-        )
+            # 创建新配置
+            config = LLMConfig(
+                name=data["name"],
+                base_url=data["base_url"],
+                api_key=api_key,
+                model_type=model_type,
+                model=data["model"],
+            )
+        else:
+            model_file = request.files.get("model_file")
+
+            if not model_file or not model_file.filename:
+                raise ValueError("未提供上传的模型文件")
+
+            model_path = save_yolobase_model(model_file)
+            config = LLMConfig(
+                name=data["name"],
+                model_type=model_type,
+                model_path=model_path,
+                model=data["model"],
+            )
 
         db.session.add(config)
         db.session.commit()
@@ -1770,6 +1788,8 @@ def api_get_llm_config(config_id):
                     "api_key": config.api_key,
                     "model": config.model,
                     "is_active": config.is_active,
+                    "model_type": config.model_type,
+                    "model_path": config.model_path,
                 },
             }
         )
@@ -1852,6 +1872,8 @@ def api_get_active_llm_config():
                         "base_url": config.base_url,
                         "api_key": config.api_key,
                         "model": config.model,
+                        "model_type": config.model_type,
+                        "model_path": config.model_path,
                     },
                 }
             )
@@ -1875,6 +1897,8 @@ def get_active_llm_config():
                         "name": config.name,
                         "base_url": config.base_url,
                         "model": config.model,
+                        "model_type": config.model_type,
+                        "model_path": config.model_path,
                     },
                 }
             )
@@ -2001,13 +2025,28 @@ def llm_detect():
                 400,
             )
 
-        # 使用LLM服务进行检测
-        from services.llm_service import LLMService
+        active_config = LLMConfig.query.filter_by(is_active=True).first()
 
-        llm_service = LLMService()
+        if active_config.model_type == "general":
+            # 使用LLM服务进行检测
+            from services.llm_service import LLMService
 
-        # 使用新的base64检测方法
-        detections = llm_service.detect_objects_from_base64(image_data, labels)
+            llm_service = LLMService()
+
+            # 使用新的base64检测方法
+            detections = llm_service.detect_objects_from_base64(image_data, labels)
+        else:
+            # 使用视觉服务加载模型
+            inference_manager = InferenceManager(project_id)
+            model = inference_manager.load_model(model_path=active_config.model_path)
+            image_file = base64_to_custom_image_file(image_data, "input_image.jpg")
+            result = inference_manager.inference_image(model, image_file)
+            # [x1, y1, x2, y2, conf, cls]
+            detections = inference_manager.convert_llm_detections(
+                model, result["detections"], image_file
+            )
+
+            print(f"使用视觉模型推理的结果：{detections}")
 
         return jsonify({"success": True, "detections": detections})
 

@@ -152,7 +152,12 @@ class InferenceManager:
         return sorted(uploaded_models)
 
     def load_model(
-        self, model_type, system_model=None, model_file=None, existing_model=None
+        self,
+        model_type=None,
+        system_model=None,
+        model_file=None,
+        existing_model=None,
+        model_path=None,
     ):
         """
         加载模型
@@ -162,6 +167,7 @@ class InferenceManager:
             system_model (str): 系统模型名称
             model_file (FileStorage或str): 上传的模型文件或已上传的模型文件名
             existing_model (str): 已存在的模型文件名
+            model_path(str)：已经上传的模型路径
 
         Returns:
             YOLO: 加载的模型对象
@@ -169,40 +175,39 @@ class InferenceManager:
         Raises:
             ValueError: 当模型无法加载时抛出异常
         """
-        model_path = None
+        if not model_path:
+            if model_type == "system":
+                if not system_model:
+                    raise ValueError("未指定系统模型")
 
-        if model_type == "system":
-            if not system_model:
-                raise ValueError("未指定系统模型")
+                model_path = self.get_system_model_path(system_model)
+                if not model_path:
+                    raise ValueError(f"系统模型 {system_model} 不存在")
+            elif model_type == "upload":
+                if not model_file or not model_file.filename:
+                    raise ValueError("未提供上传的模型文件")
 
-            model_path = self.get_system_model_path(system_model)
-            if not model_path:
-                raise ValueError(f"系统模型 {system_model} 不存在")
-        elif model_type == "upload":
-            if not model_file or not model_file.filename:
-                raise ValueError("未提供上传的模型文件")
+                model_path = self.save_uploaded_model(model_file)
+            elif model_type == "uploaded":
+                # 处理已上传的模型文件
+                if not model_file:
+                    raise ValueError("未指定已上传的模型文件")
 
-            model_path = self.save_uploaded_model(model_file)
-        elif model_type == "uploaded":
-            # 处理已上传的模型文件
-            if not model_file:
-                raise ValueError("未指定已上传的模型文件")
+                uploaded_models_dir = os.path.join(
+                    "projects", str(self.project_id), "uploaded_models"
+                )
+                model_path = os.path.join(uploaded_models_dir, model_file)
+                if not os.path.exists(model_path):
+                    raise ValueError(f"已上传模型 {model_file} 不存在")
+            elif model_type == "existing":
+                if not existing_model:
+                    raise ValueError("未指定已存在模型")
 
-            uploaded_models_dir = os.path.join(
-                "projects", str(self.project_id), "uploaded_models"
-            )
-            model_path = os.path.join(uploaded_models_dir, model_file)
-            if not os.path.exists(model_path):
-                raise ValueError(f"已上传模型 {model_file} 不存在")
-        elif model_type == "existing":
-            if not existing_model:
-                raise ValueError("未指定已存在模型")
-
-            model_path = os.path.join(self.project_model_dir, existing_model)
-            if not os.path.exists(model_path):
-                raise ValueError(f"已存在模型 {existing_model} 不存在")
-        else:
-            raise ValueError(f"不支持的模型类型: {model_type}")
+                model_path = os.path.join(self.project_model_dir, existing_model)
+                if not os.path.exists(model_path):
+                    raise ValueError(f"已存在模型 {existing_model} 不存在")
+            else:
+                raise ValueError(f"不支持的模型类型: {model_type}")
 
         try:
             # 为了兼容PyTorch 2.6+，需要设置weights_only=False
@@ -275,10 +280,56 @@ class InferenceManager:
                 "class_counts": plot_engine.class_counts,
                 "total_count": plot_engine.total_count,
                 "region_stats": plot_engine.region_stats,
+                "detections": plot_engine.detections,
             }
 
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def convert_llm_detections(self, model, detections, iamge_file):
+        """
+        将模型输出的检测结果 [[x1, y1, x2, y2, conf, cls]] 转换为指定格式的字典列表
+        :param model: 模型
+        :param detections: 模型原始检测结果，格式如 [[383.16, 16.6, 721.28, 447.42, 0.854, 0.0]]
+        :param iamge_file: 识别图片
+        :return:
+        """
+
+        # 2. 初始化结果列表
+        converted_results = []
+        img_width, img_height = iamge_file.image_size
+
+        # 3. 遍历检测结果（兼容单条/多条检测框）
+        # 先处理外层列表，确保每一行是一个检测框
+        for det in detections:
+            if isinstance(det, list) and len(det) >= 6:
+                x1, y1, x2, y2, conf, cls_id = det[:6]
+
+                # 4. 坐标归一化（转换为0-1之间的相对值）
+                # 计算中心点x/y（归一化）
+                x = (x1 + x2) / 2 / img_width  # 中心点x坐标归一化
+                y = (y1 + y2) / 2 / img_height  # 中心点y坐标归一化
+                # 计算宽度/高度（归一化）
+                width = (x2 - x1) / img_width  # 检测框宽度归一化
+                height = (y2 - y1) / img_height  # 检测框高度归一化
+
+                # 5. 获取中英文标签（默认未知类别）
+                Label_name = model.names[int(cls_id)]
+
+                # 7. 构造中文标签的检测项（和英文项坐标/置信度完全一致）
+                item = {
+                    "label": Label_name,
+                    "confidence": round(float(conf), 6),
+                    "x": round(x, 6),
+                    "y": round(y, 6),
+                    "width": round(width, 6),
+                    "height": round(height, 6),
+                }
+
+                # 8. 添加到结果列表
+                converted_results.append(item)
+
+        return converted_results
 
     def inference_video(self, model, video_file):
         log.info(f"开始推理视频----{self.material.id}:{video_path}")
