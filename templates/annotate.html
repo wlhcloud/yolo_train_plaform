@@ -18,8 +18,9 @@
     }
 
     .annotation-sidebar {
-        max-height: calc(100vh - 100px);
+        max-height: calc(100vh - 400px);
         overflow-y: auto;
+        scroll-behavior: smooth;
     }
 
     .canvas-container {
@@ -29,6 +30,38 @@
 
     #fabricCanvas {
         border: 1px solid #ddd;
+    }
+
+    /* 高亮样式 */
+    .highlight-item {
+        background-color: #fff3cd !important;
+        border: 1px solid #ffeeba !important;
+        transition: all 0.3s ease;
+    }
+
+    .keyword-highlight {
+        background-color: #ffc107;
+        color: #212529;
+        padding: 0 2px;
+        border-radius: 2px;
+    }
+
+    .highlight-first {
+        animation: pulse 1s ease-in-out 2;
+    }
+
+    @keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7);
+        }
+
+        70% {
+            box-shadow: 0 0 0 10px rgba(255, 193, 7, 0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0 rgba(255, 193, 7, 0);
+        }
     }
 </style>
 {% endblock %}
@@ -89,13 +122,14 @@
         <div class="row">
             <div class="col-md-9">
                 <div class="annotation-container">
-                    <div class="canvas-container">
+                    <div class="canvas-container" style="        overflow-y: scroll;
+        height: 70vh;">
                         <canvas id="fabricCanvas"></canvas>
                     </div>
                 </div>
             </div>
             <div class="col-md-3">
-                <div class="annotation-sidebar">
+                <div>
                     <!-- 标签页导航 -->
                     <ul class="nav nav-tabs mb-3" id="sidebarTabs" role="tablist">
                         <li class="nav-item" role="presentation">
@@ -107,9 +141,18 @@
                                 data-bs-target="#annotationsPane" type="button" role="tab">标注框列表</button>
                         </li>
                     </ul>
+                    <!-- 新增搜索框区域 -->
+                    <div class="mb-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            <input type="text" class="form-control" id="sidebarSearchInput" placeholder="搜索标签/标注框..."
+                                aria-label="搜索">
+                            <button class="btn btn-outline-secondary" type="button" id="sidebarSearchBtn">搜索</button>
+                        </div>
+                    </div>
 
                     <!-- 标签页内容 -->
-                    <div class="tab-content" id="sidebarTabContent">
+                    <div class="tab-content annotation-sidebar" id="sidebarTabContent">
                         <!-- 标签管理面板 -->
                         <div class="tab-pane fade show active" id="labelsPane" role="tabpanel">
                             <div class="card">
@@ -128,7 +171,7 @@
                         </div>
 
                         <!-- 标注框列表面板 -->
-                        <div class="tab-pane fade" id="annotationsPane" role="tabpanel">
+                        <div class="tab-pane fade annotation-sidebar" id="annotationsPane" role="tabpanel">
                             <div class="card">
                                 <div class="card-header d-flex justify-content-between align-items-center">
                                     <div>
@@ -224,6 +267,7 @@
     let isDrawing = false;
     let rectangle = null;
 
+
     // 初始化Fabric.js画布
     document.addEventListener('DOMContentLoaded', function () {
         initCanvas();
@@ -241,7 +285,205 @@
         window.addEventListener('beforeunload', function (e) {
             // 可以在这里添加自动保存逻辑
         });
+
+        $('#sidebarSearchInput').on('keypress', function (e) {
+            if (e.which === 13) {
+                doSearch();
+            }
+        });
+        // 搜索按钮点击触发搜索
+        $('#sidebarSearchBtn').on('click', doSearch);
     });
+    // 搜索逻辑
+    function doSearch() {
+
+        console.log('点击了搜索')
+
+        const searchText = $('#sidebarSearchInput').val().trim().toLowerCase();
+        if (!searchText) {
+            // 清空搜索条件，恢复显示所有内容
+            resetSearchResult();
+            return;
+        }
+
+        // 根据当前激活的标签页执行不同的搜索逻辑
+        if ($('#labels-tab').hasClass('active')) {
+            searchLabels(searchText); // 搜索标签
+        } else {
+            searchAnnotations(searchText); // 搜索标注框
+        }
+    }
+
+    // 重置搜索结果 - 显示所有内容
+    function resetSearchResult() {
+        // 显示所有标签
+        $('.label-item').show();
+        // 显示所有标注框
+        $('.annotation-item').show();
+    }
+
+    // 通用滚动函数
+    function scrollToElementInSidebar($target) {
+        const $sidebar = $('.annotation-sidebar');
+        if (!$sidebar.length || !$target.length) return;
+
+        const sidebarTop = $sidebar.offset().top;
+        const targetTop = $target.offset().top;
+        const top = targetTop - sidebarTop - 10;
+
+        $sidebar.stop().animate({ scrollTop: top }, 300);
+    }
+    function searchLabels(keyword) {
+        if (!keyword) {
+            resetSearchResult();
+            return;
+        }
+
+        let first = null;
+        const lowerKey = keyword.toLowerCase();
+
+        $('.label-item').each(function () {
+            const $item = $(this);
+            const $textEl = $item.find('.label-name-text');
+            if (!$textEl.length) return;
+
+            const text = $textEl.text().trim();
+            const lowerText = text.toLowerCase();
+
+            if (lowerText.includes(lowerKey)) {
+                if (!first) first = $item;
+                // 只高亮文字，不重建HTML
+                highlightText($textEl, keyword);
+            } else {
+                // 清除高亮
+                $textEl.text(text);
+            }
+        });
+
+        if (first) {
+            scrollToElementInSidebar(first);
+        }
+    }
+
+    // 标注框搜索
+    function searchAnnotations(keyword) {
+        console.log('搜索了标注框', keyword);
+        let hasMatch = false;
+        let $firstMatch = null;
+        const annotationItems = $('#annotationsList').find('.annotation-item');
+        const lowerKeyword = keyword.toLowerCase().trim();
+
+        // 1. 重置高亮
+        annotationItems.each(function () {
+            const $this = $(this);
+            // 优先找标注框名称专属容器
+            const $nameText = $this.find('.annotation-name-text').length ?
+                $this.find('.annotation-name-text') : $this;
+
+
+            const originalText = $nameText.data('original-text') || $nameText.text().trim();
+            $nameText.text(originalText); // 用text()而非html()，避免DOM重绘
+            $this.removeClass('highlight-first');
+        });
+
+        // 2. 仅高亮关键词
+        annotationItems.each(function () {
+            const $this = $(this);
+            const $nameText = $this.find('.annotation-name-text').length ?
+                $this.find('.annotation-name-text') : $this;
+
+            // 保存原始文本（仅首次执行）
+            if (!$nameText.data('original-text')) {
+                $nameText.data('original-text', $nameText.text().trim());
+            }
+            const originalText = $nameText.data('original-text');
+            const text = originalText.toLowerCase();
+
+            if (lowerKeyword && text.includes(lowerKeyword)) {
+                // 安全高亮：转义正则特殊字符，避免匹配出错
+                const escapedKeyword = lowerKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const highlightedText = originalText.replace(
+                    new RegExp(escapedKeyword, 'gi'),
+                    (match) => `<mark class="keyword-highlight">${match}</mark>`
+                );
+                // 仅修改名称区域的HTML，且先判断是否需要修改 → 减少DOM操作
+                if ($nameText.html() !== highlightedText) {
+                    $nameText.html(highlightedText);
+                }
+
+                if (!hasMatch) {
+                    $firstMatch = $this;
+                    $this.addClass('highlight-first');
+                }
+                hasMatch = true;
+            }
+        });
+
+        // 3. 平滑滚动（加stop()避免多次触发滚动导致抖动）
+        if (hasMatch && $firstMatch) {
+            scrollToElementInSidebar($firstMatch);
+        } else if (lowerKeyword) {
+            showTips('未找到匹配的标注框', 'warning');
+        } else {
+            clearSearchTips();
+        }
+    }
+
+    // 文字高亮
+    function highlightText($el, keyword) {
+        const text = $el.text().trim();
+        const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(${escaped})`, 'gi');
+
+        const result = text.replace(regex, '<mark class="keyword-highlight">$1</mark>');
+        $el.html(result);
+    }
+
+    // 清空搜索
+    function resetSearchResult() {
+        // 重置标签
+        $('#labelsList').find('.label-item').each(function () {
+            const $this = $(this);
+            const $nameText = $this.find('.label-name-text');
+            const originalText = $nameText.data('original-text') || $nameText.text().trim();
+            $nameText.text(originalText);
+            $this.removeClass('highlight-first');
+        });
+
+        // 重置标注框
+        $('#annotationsList').find('.annotation-item').each(function () {
+            const $this = $(this);
+            const $nameText = $this.find('.annotation-name-text').length ?
+                $this.find('.annotation-name-text') : $this;
+            const originalText = $nameText.data('original-text') || $nameText.text().trim();
+            $nameText.text(originalText);
+            $this.removeClass('highlight-first');
+        });
+
+        // 平滑滚动回顶部（加stop()）
+        $('.annotation-sidebar').stop().animate({ scrollTop: 0 }, 200);
+        clearSearchTips();
+    }
+
+
+    // 清空搜索提示
+    function clearSearchTips() {
+        $('.search-tips').remove();
+    }
+
+    // 显示搜索提示
+    function showTips(message, type) {
+        clearSearchTips();
+        const tipClass = type === 'warning' ? 'text-warning' : 'text-info';
+        const tipHtml = `<div class="search-tips ${tipClass} small mt-2">${message}</div>`;
+
+        // 根据当前激活的标签页显示提示
+        if ($('#labels-tab').hasClass('active')) {
+            $('#labelsList').after(tipHtml);
+        } else {
+            $('#annotationsList').after(tipHtml);
+        }
+    }
 
     // 初始化画布
     function initCanvas() {
@@ -317,7 +559,19 @@
                             transparentCorners: false,
                             cornerColor: 'rgba(0,0,0,0.5)',
                             cornerSize: 12,
-                            labelId: currentLabel.id
+                            labelId: currentLabel.id,
+                            labelName: currentLabel.name
+                        });
+
+                        // 标注框点击事件 → 触发搜索
+                        rectangle.on('mousedown', function () {
+                            // 切换到标注框列表标签页
+                            $('#annotations-tab').click();
+                            // 填充搜索框为当前标注框的标签名称
+                            console.log(this.labelName)
+                            $('#sidebarSearchInput').val(this.labelName);
+                            // 触发搜索（调用已有的doSearch函数）
+                            doSearch();
                         });
 
                         canvas.add(rectangle);
@@ -435,7 +689,7 @@
             });
     }
 
-    // 渲染标签列表
+    // 渲染标签列表（修改版：给标签名称加专属容器）
     function renderLabels() {
         const labelsList = document.getElementById('labelsList');
         labelsList.innerHTML = '';
@@ -447,15 +701,17 @@
 
         labels.forEach(label => {
             const labelElement = document.createElement('div');
-            labelElement.className = 'd-flex justify-content-between align-items-center  px-20  ';
+            labelElement.className = 'label-item d-flex justify-content-between align-items-center  px-20  ';
 
+            // 关键修改：给标签名称包裹<span class="label-name-text">
             labelElement.innerHTML = `
             <span style='position: absolute;
     background: ${label.color};
     width: 8px;
     height: 8px;
-    border-radius: 25px;left: 3px;'></span><div>
-                ${label.name}
+    border-radius: 25px;left: 3px;'></span>
+            <div>
+                <span class="label-name-text">${label.name}</span>
             </div>
             <div>
                 <button class="btn btn-sm btn-outline-primary me-1" style="height: 28px;border: 0px;" onclick="selectLabel(${label.id})">
@@ -600,8 +856,7 @@
                 layer.msg('删除标签失败');
             });
     }
-
-    // 渲染标注列表
+    // 渲染标注列表（添加.annotation-name-text，支持无抖动高亮）
     function renderAnnotationsList(annotations) {
         const annotationsList = document.getElementById('annotationsList');
         const annotationCount = document.getElementById('annotationCount');
@@ -670,14 +925,15 @@
             }
 
             const annotationElement = document.createElement('div');
-            annotationElement.className = 'd-flex justify-content-between align-items-center mb-2 p-2 border rounded';
+            annotationElement.className = 'annotation-item d-flex justify-content-between align-items-center mb-2 p-2 border rounded'; // 加annotation-item class
             annotationElement.style.borderLeft = `4px solid ${label.color}`;
             // 为每个标注元素添加唯一ID，便于删除
             annotationElement.id = `annotation-${index}`;
 
+            // 关键修改：给标签名称包裹.annotation-name-text容器
             annotationElement.innerHTML = `
             <div>
-                <strong>${label.name}</strong><br>
+                <strong class="annotation-name-text">${label.name}</strong><br>
                 <small>位置: (${pixelLeft}, ${pixelTop})</small><br>
                 <small>尺寸: ${pixelWidth}px × ${pixelHeight}px</small>
             </div>
@@ -904,7 +1160,19 @@
                         hasControls: true,
                         hasBorders: true,
                         selectable: true,
-                        labelId: ann.label_id
+                        labelId: ann.label_id,
+                        labelName: label.name
+                    });
+
+                    // 标注框点击事件 → 触发搜索
+                    rect.on('mousedown', function () {
+                        // 切换到标注框列表标签页
+                        $('#annotations-tab').click();
+                        // 填充搜索框为当前标注框的标签名称
+                        console.log(this.labelName)
+                        $('#sidebarSearchInput').val(this.labelName);
+                        // 触发搜索（调用已有的doSearch函数）
+                        doSearch();
                     });
 
                     canvas.add(rect);
