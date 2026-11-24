@@ -9,6 +9,9 @@ import cv2
 
 from PIL import Image as PILImage
 
+# 全局标志：NVENC 是否可用（初始假设可用，失败后设为 False）
+_nvenc_available = True
+
 
 def extract_first_frame(source_url, save_dir):
     """
@@ -72,40 +75,96 @@ def start_ffmpeg_rtsp_push(width, height, fps, push_url):
 
 def start_ffmpeg_video_save(width, height, fps, output_path):
     """
-    保存视频
-
-    :param width: 说明
-    :param height: 说明
-    :param fps: 说明
-    :param output_path: 说明
+    保存视频（优先 NVENC GPU 硬编，失败回退 libx264）
     """
+    # 启动时一次性探测 NVENC 可用性（避免每帧探测）
+    global _nvenc_available
+    if _nvenc_available:
+        # 探测：跑一个超短的 ffmpeg 测试，1 帧输入立即退出
+        try:
+            probe_cmd = [
+                "ffmpeg",
+                "-y",
+                "-f", "rawvideo",
+                "-pix_fmt", "bgr24",
+                "-s", f"{width}x{height}",
+                "-r", "1",
+                "-i", "pipe:0",
+                "-frames:v", "1",
+                "-c:v", "h264_nvenc",
+                "-f", "null",
+                "-",
+            ]
+            probe_proc = subprocess.Popen(
+                probe_cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            probe_proc.stdin.write(b"\x00" * (width * height * 3))
+            probe_proc.stdin.close()
+            probe_proc.wait(timeout=5)
+            if probe_proc.returncode == 0:
+                print("✅ NVENC 硬编可用，将使用 GPU 编码")
+            else:
+                _nvenc_available = False
+                stderr = probe_proc.stderr.read().decode("utf-8", errors="ignore")
+                print(f"⚠️ NVENC 探测失败，回退 libx264: {stderr[:200]}")
+        except Exception as e:
+            _nvenc_available = False
+            print(f"⚠️ NVENC 不可用，回退 libx264: {e}")
+
+    # 优先尝试 NVENC
+    if _nvenc_available:
+        nvenc_cmd = [
+            "ffmpeg",
+            "-y",
+            "-f", "rawvideo",
+            "-pix_fmt", "bgr24",
+            "-s", f"{width}x{height}",
+            "-r", str(fps),
+            "-i", "pipe:0",
+            "-an",
+            "-c:v", "h264_nvenc",
+            "-preset", "p4",
+            "-rc", "vbr",
+            "-b:v", "4M",
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            "-vsync", "cfr",
+            "-r", str(fps),
+            output_path,
+        ]
+        return subprocess.Popen(
+            nvenc_cmd,
+            stdin=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+
+    # 回退：libx264 软件编码
     ffmpeg_cmd = [
         "ffmpeg",
         "-y",
-        "-f",
-        "rawvideo",
-        "-pix_fmt",
-        "bgr24",
-        "-s",
-        f"{width}x{height}",
-        "-r",
-        str(fps),
-        "-i",
-        "pipe:0",
+        "-f", "rawvideo",
+        "-pix_fmt", "bgr24",
+        "-s", f"{width}x{height}",
+        "-r", str(fps),
+        "-i", "pipe:0",
         "-an",
-        "-c:v",
-        "libx264",
-        "-pix_fmt",
-        "yuv420p",
-        "-movflags",
-        "+faststart",
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        "-preset", "ultrafast",
+        "-tune", "zerolatency",
+        "-vsync", "cfr",
+        "-r", str(fps),
+        "-threads", "8",
         output_path,
     ]
-
     return subprocess.Popen(
         ffmpeg_cmd,
         stdin=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
     )
 
 

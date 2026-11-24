@@ -19,7 +19,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv()
 project_task_locks = {}
 # 线程池（全局复用，控制最大并发数）
-MAX_WORKERS = 5
+# A100 推理单 batch 已经能吃满，多路并发会导致 context switch 和 SM 利用率碎片化
+# 单流串行推理才是最高效的，每时刻只让 1 个视频走 GPU
+MAX_WORKERS = 1
 executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 # 媒体服务器路径
 MEDIA_SERVER = "http://wlhcloud.top:9132/live"  # 推流服务器地址
@@ -38,9 +40,16 @@ def create_app():
     print("系统首选编码:", locale.getpreferredencoding())
     # 配置
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
+    app.config["MAX_PARALLEL_MATERIALS"] = os.environ.get("MAX_PARALLEL_MATERIALS")
+    app.config["ENABLE_VIDEO_DRAW"] = os.environ.get("ENABLE_VIDEO_DRAW")
     app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-        "connect_args": {"options": "-c client_encoding=utf8"}
+        "connect_args": {"options": "-c client_encoding=utf8"},
+        # 取连接前先做一次轻量健康检查，数据库侧掐掉空闲连接后自动重连，
+        # 避免"server closed the connection unexpectedly"（推理任务耗时数小时，池内连接长期空闲）
+        "pool_pre_ping": True,
+        # 空闲超过 30 分钟的连接强制回收重建
+        "pool_recycle": 1800,
     }
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     print(">>> DATABASE_URL (repr):", repr(os.environ.get("DATABASE_URL")))
@@ -101,4 +110,4 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True, host="0.0.0.0", port=5500)
+    app.run(debug=True, host="0.0.0.0", port=5555)

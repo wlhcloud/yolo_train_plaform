@@ -41,6 +41,7 @@ from models import (
     Annotation,
     ExportRecord,
     LLMConfig,
+    SurveyStat,
 )
 from werkzeug.utils import secure_filename
 from sqlalchemy import and_, not_, text, update
@@ -53,6 +54,7 @@ from services.reasoning_material_service import (
     ReasoningMaterialService,
     reasoning_material_service,
 )
+from services import survey_service
 from utils import base64_to_custom_image_file, extract_first_frame, save_yolobase_model
 from project_dir_manager import ProjectDirManager
 from loguru import logger as log
@@ -1158,6 +1160,7 @@ def run_inference(project_id):
             "total_materials": 0,
             "completed_materials": 0,
             "stop_event": threading.Event(),
+            "counter_lock": threading.Lock(),  # 并行推理时的进度计数锁
         }
 
     try:
@@ -1196,13 +1199,14 @@ def run_inference(project_id):
             "model_file": model_file,
             "labels": labels,
         }
+        log.info(f"推理任务已提交至后台运行，素材数量：{len(materials)}")
         executor.submit(
             inference_service.background_inference_controller,
             project_id,
             materials,
             modeel_obj,
         )
-
+        
         return (
             jsonify(
                 {
@@ -1269,7 +1273,19 @@ def run_inference_complex(project_id):
             if not video_file or video_file.filename == "":
                 return jsonify({"success": False, "error": "未选择视频文件"})
 
-            result = inference_manager.inference_video(model, video_file)
+            # 读取绘制开关（默认 True，保持原行为；True=绘制, False=跳过绘制）
+            enable_draw = request.form.get("enable_draw", "true").lower() in ("true", "1", "yes", "on")
+            log.info(f"视频推理 enable_draw={enable_draw}")
+
+            # 使用 NVDEC GPU 硬件解码进行推理（极速版）
+            try:
+                result = inference_manager.inference_video_nvdec(model, video_file, enable_draw=enable_draw)
+                log.info(f"NVDEC 推理视频完成")
+            except Exception as nvdec_err:
+                # NVDEC 失败时自动回退到普通方法
+                log.warning(f"NVDEC 推理失败，回退到普通方法: {str(nvdec_err)}")
+                result = inference_manager.inference_video(model, video_file, enable_draw=enable_draw)
+                log.info(f"普通方法推理视频完成")
             return jsonify({"success": True, "result": result})
 
         elif inference_type == "rtsp":
@@ -1286,6 +1302,203 @@ def run_inference_complex(project_id):
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+
+
+# ==================== 文件夹交通量调查推理 ====================
+# 每个项目同一时刻只允许一个调查推理任务
+survey_task_locks = {}  # project_id -> {running, total, done, current_file, frame_done, frame_total, excels, error}
+
+
+def _persist_survey_minute_stats(app, project_id, results):
+    """把调查推理的每分钟统计写入 yolov8_platform.survey_stat 表。
+
+    同一（项目, 调查日期, 地点, 道路, 方向）重复跑时先删旧数据再插入，
+    保证幂等。在后台线程中调用，需要传入 Flask app 对象建立上下文。
+    """
+    try:
+        with app.app_context():
+            for r in results:
+                SurveyStat.query.filter_by(
+                    project_id=project_id,
+                    survey_date=r["survey_date"],
+                    spot_name=r["spot"],
+                    road=r["road"],
+                    direction=r["direction"],
+                ).delete(synchronize_session=False)
+                for minute, counts in r.get("minute_rows", []):
+                    for cat, cnt in counts.items():
+                        db.session.add(SurveyStat(
+                            project_id=project_id,
+                            survey_date=r["survey_date"],
+                            spot_name=r["spot"],
+                            road=r["road"],
+                            direction=r["direction"],
+                            minute_of_day=int(minute),
+                            category=cat,
+                            count=int(cnt),
+                        ))
+            db.session.commit()
+            total_rows = sum(
+                len(r.get("minute_rows", [])) for r in results
+            )
+            log.info(f"项目{project_id}调查统计入库完成：{len(results)} 个方向文件夹，{total_rows} 个分钟记录")
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        log.warning(f"调查统计入库失败（不影响 Excel 生成）: {e}")
+
+
+@main.route("/project/<int:project_id>/inference/survey/start", methods=["POST"])
+def start_survey_inference(project_id):
+    """启动文件夹调查推理：扫描服务端目录的三级结构（调查点/道路/方向），
+    逐视频推理并按 5 分钟时段统计，每个三级目录生成一个 Excel。"""
+    project = Project.query.get_or_404(project_id)
+
+    data = request.get_json(silent=True) or {}
+    folder = (data.get("folder") or "").strip()
+    model_type = data.get("model_type")
+    only_approaching = bool(data.get("only_approaching"))
+
+    if not folder:
+        return jsonify({"success": False, "message": "请填写视频根文件夹路径"}), 400
+    if not os.path.isdir(folder):
+        return jsonify({"success": False, "message": f"文件夹不存在: {folder}"}), 400
+    if model_type == "upload":
+        return jsonify({
+            "success": False,
+            "message": "调查推理暂不支持「上传模型文件」，请选择系统/已上传/已存在模型",
+        }), 400
+
+    # 每个项目只允许一个调查推理任务
+    task = survey_task_locks.get(project_id)
+    if task and task.get("running"):
+        return jsonify({"success": False, "message": "该项目已有运行中的调查推理任务"}), 409
+
+    labels = Label.query.filter_by(project_id=project_id).all()
+    if not labels:
+        return jsonify({
+            "success": False,
+            "message": "该项目尚未配置分类标签映射（label 表为空），请先在推理页配置",
+        }), 400
+    labels_map = {l.name: (l.target or l.name) for l in labels}
+    # 去重且保持 label 顺序
+    categories = list(dict.fromkeys(labels_map.values()))
+
+    # 后台线程写库需要 app 对象（脱离请求上下文后建立 app 上下文）
+    app = current_app._get_current_object()
+
+    survey_task_locks[project_id] = {
+        "running": True,
+        "total": 0,
+        "done": 0,
+        "current_file": "",
+        "frame_done": 0,
+        "frame_total": 0,
+        "excels": [],
+        "error": None,
+        "only_approaching": only_approaching,
+        "folder": folder,
+    }
+
+    def _run_survey_task():
+        _task = survey_task_locks[project_id]
+        try:
+            _task["status"] = "loading_model"
+            im = InferenceManager(project_id)
+            model = im.load_model(
+                model_type=model_type,
+                system_model=data.get("system_model"),
+                model_file=data.get("uploaded_model"),
+                existing_model=data.get("existing_model"),
+            )
+            _task["status"] = "inferring"
+
+            def _cb(done, total, current_file, frame_done, frame_total):
+                _task["done"] = done
+                _task["total"] = total
+                _task["current_file"] = current_file
+                _task["frame_done"] = frame_done
+                _task["frame_total"] = frame_total
+
+            results = survey_service.run_survey(
+                root=folder,
+                model=model,
+                labels_map=labels_map,
+                categories=categories,
+                only_approaching=only_approaching,
+                progress_cb=_cb,
+            )
+
+            # 每分钟统计入库（survey_stat 表）；失败不影响 Excel 生成
+            _persist_survey_minute_stats(app, project_id, results)
+
+            _task["excels"] = [
+                {
+                    "index": i,
+                    "name": os.path.basename(r["excel_path"]),
+                    "path": r["excel_path"],
+                    "spot": r["spot"],
+                    "road": r["road"],
+                    "direction": r["direction"],
+                    "video_count": r["video_count"],
+                    "track_count": r["track_count"],
+                }
+                for i, r in enumerate(results)
+            ]
+            _task["status"] = "finished"
+            log.info(f"项目{project_id}调查推理完成，生成 {len(results)} 个Excel")
+        except Exception as e:
+            log.error(f"调查推理失败: {e}\n{traceback.format_exc()}")
+            _task["error"] = str(e)
+            _task["status"] = "error"
+        finally:
+            _task["running"] = False
+
+    executor.submit(_run_survey_task)
+    return jsonify({
+        "success": True,
+        "message": "调查推理任务已提交，可通过进度接口查询",
+    }), 202
+
+
+@main.route("/project/<int:project_id>/inference/survey/status", methods=["GET"])
+def survey_inference_status(project_id):
+    """查询调查推理进度与已生成的 Excel 列表"""
+    task = survey_task_locks.get(project_id)
+    if not task:
+        return jsonify({"success": True, "status": "idle"})
+    return jsonify({
+        "success": True,
+        "status": task.get("status", "running"),
+        "running": task.get("running", False),
+        "total": task.get("total", 0),
+        "done": task.get("done", 0),
+        "current_file": task.get("current_file", ""),
+        "frame_done": task.get("frame_done", 0),
+        "frame_total": task.get("frame_total", 0),
+        "folder": task.get("folder", ""),
+        "error": task.get("error"),
+        "excels": [
+            {k: v for k, v in e.items() if k != "path"} for e in task.get("excels", [])
+        ],
+    })
+
+
+@main.route("/project/<int:project_id>/inference/survey/excel/<int:index>", methods=["GET"])
+def survey_excel_download(project_id, index):
+    """下载调查推理生成的 Excel（只允许下载本次任务记录内的文件）"""
+    task = survey_task_locks.get(project_id)
+    if not task:
+        abort(404)
+    excels = task.get("excels", [])
+    if index < 0 or index >= len(excels):
+        abort(404)
+    path = excels[index]["path"]
+    if not os.path.exists(path):
+        abort(404)
+    return send_file(path, as_attachment=True, download_name=excels[index]["name"])
 
 
 # Flask后端示例：停止推理接口
@@ -2901,6 +3114,24 @@ def material_config_page(project_id, id):
         id=id, project_id=project_id
     ).first_or_404()
 
+    # 封面兜底：视频素材若首帧封面缺失或文件丢失，按 path 重新抽取一张（cv2 ffmpeg 后端支持 .MTS）
+    try:
+        if materials.material_type == 2:
+            cover_rel = materials.cover_image or ""
+            cover_abs = os.path.join("static", cover_rel) if cover_rel else ""
+            if (not cover_rel or not os.path.exists(cover_abs)) and materials.path:
+                video_abs = os.path.join("static", materials.path)
+                if os.path.exists(video_abs):
+                    cover_abs_new = extract_first_frame(video_abs, os.path.dirname(video_abs))
+                    new_rel = os.path.relpath(cover_abs_new, "static")
+                    new_rel = posixpath.join(*new_rel.split(os.sep))
+                    materials.cover_image = new_rel
+                    db.session.commit()
+                    log.info(f"已为素材 {materials.id} 重新生成封面: {new_rel}")
+    except Exception as e:
+        db.session.rollback()
+        log.warning(f"重新生成视频封面失败 id={materials.id}: {e}")
+
     if materials.config:
         material_config_str = json.dumps(materials.config, ensure_ascii=False)
     else:
@@ -3079,9 +3310,17 @@ def api_inference_material_page(project_id):
     materials = pagination.items
 
     for m in materials:
-        if m.result and m.result.get("success"):
-            m.total_count = m.result.get("result", {}).get("total_count", 0)
-        else:
+        try:
+            if m.result and isinstance(m.result, dict) and m.result.get("success"):
+                result_data = m.result.get("result", {})
+                if isinstance(result_data, dict):
+                    m.total_count = result_data.get("total_count", 0)
+                else:
+                    m.total_count = 0
+            else:
+                m.total_count = 0
+        except (AttributeError, TypeError) as e:
+            print(f"[API] 处理素材 {m.id} 结果时出错: {e}")
             m.total_count = 0
         if m.status == 0:
             m.status_text = "未开始"
@@ -3237,7 +3476,19 @@ def save_server_files(project_id):
 
 @main.route("/api/project/<int:project_id>/export_zip", methods=["GET"])
 def export_materials_zip(project_id):
+    """
+    导出项目下所有素材的统计 Excel，打包成 zip 下载。
+    Query 参数:
+      - only_approaching=1: 仅统计轨迹"由远到近"的物体
+    """
     project = Project.query.get_or_404(project_id)
+
+    only_approaching = request.args.get("only_approaching", "0").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
     # 创建临时目录
     base_dir = tempfile.mkdtemp(prefix=f"export_project_{project_id}_")
@@ -3260,7 +3511,9 @@ def export_materials_zip(project_id):
         if not materials:
             continue
 
-        data = ReasoningMaterialService.aggregate_by_category(materials, project.name)
+        data = ReasoningMaterialService.aggregate_by_category(
+            materials, project.name, only_approaching=only_approaching
+        )
         excel_path = os.path.join(base_dir, excel_name)
         ReasoningMaterialService.build_excel(data, excel_path)
         excel_paths.append(excel_path)

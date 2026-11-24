@@ -166,7 +166,8 @@
             {% if pagination.has_prev %}
             <li class="page-item">
                 <a class="page-link"
-                    href="{{ url_for('main.infer_image_material', project_id=project.id, page=pagination.prev_num, per_page=pagination.per_page) }}"
+                    href="{{ url_for('main.infer_rtsp_material', project_id=project.id, page=pagination.prev_num, per_page=pagination.per_page) }}"
+                    onclick="return gotoMaterialPage(this.href, this)"
                     aria-label="上一页">
                     <span aria-hidden="true">&laquo;</span>
                 </a>
@@ -183,7 +184,8 @@
             {% if page_num != pagination.page %}
             <li class="page-item">
                 <a class="page-link"
-                    href="{{ url_for('main.infer_image_material', project_id=project.id, page=page_num, per_page=pagination.per_page) }}">{{
+                    href="{{ url_for('main.infer_rtsp_material', project_id=project.id, page=page_num, per_page=pagination.per_page) }}"
+                    onclick="return gotoMaterialPage(this.href, this)">{{
                     page_num }}</a>
             </li>
             {% else %}
@@ -202,7 +204,8 @@
             {% if pagination.has_next %}
             <li class="page-item">
                 <a class="page-link"
-                    href="{{ url_for('main.infer_image_material', project_id=project.id, page=pagination.next_num, per_page=pagination.per_page) }}"
+                    href="{{ url_for('main.infer_rtsp_material', project_id=project.id, page=pagination.next_num, per_page=pagination.per_page) }}"
+                    onclick="return gotoMaterialPage(this.href, this)"
                     aria-label="下一页">
                     <span aria-hidden="true">&raquo;</span>
                 </a>
@@ -270,15 +273,61 @@
 
 {% block extra_js %}
 <script>
+
+    /**
+     * 解析当前 include 片段所属的 avalon 模型（含 PageCodeRdm 的那个）。
+     * 兼容两种父页面：
+     *   1) 容器上 ms-controller="xxx"（avalon 处理后会留下 avalonctrl 标记），如 inference.html
+     *   2) 父页面用全局变量暴露模型（window.model），如 reasoning_material.html
+     */
+    function findIncludePageModel(el) {
+        // 1) 从触发元素向上找最近的 avalon 控制器
+        var node = el;
+        while (node && node.getAttribute) {
+            var ctrl = node.getAttribute('avalonctrl');
+            if (ctrl && window.avalon && avalon.vmodels && avalon.vmodels[ctrl]) {
+                var vm = avalon.vmodels[ctrl];
+                if ('PageCodeRdm' in vm) return vm;
+            }
+            node = node.parentNode;
+        }
+        // 2) 回退到父页面暴露的全局 model
+        if (typeof window.model !== 'undefined' && window.model && 'PageCodeRdm' in window.model) {
+            return window.model;
+        }
+        return null;
+    }
+
+    /**
+     * 素材分页跳转：更新所属 avalon 模型的 PageCodeRdm，
+     * 让 include 容器重新加载内容，浏览器地址栏保持不变。
+     * 片段被单独打开（找不到 avalon 容器）时，兜底为普通跳转。
+     */
+    function gotoMaterialPage(url, el) {
+        try {
+            var vm = findIncludePageModel(el || this);
+            if (vm) {
+                vm.PageCodeRdm = url;
+                return false;  // 阻止 <a> 默认导航，地址栏保持不变
+            }
+        } catch (e) {
+            console.warn('gotoMaterialPage:', e);
+        }
+        // 兜底：片段独立打开时的常规行为
+        window.location.href = url;
+        return false;
+    }
+
 $(function () {
         const perPageSelect = document.getElementById('perPageSelect');
         // 监听每页显示数量变化
         perPageSelect.addEventListener('change', function () {
             const perPage = this.value;
-            const url = new URL(window.location);
+            // 在当前 include 容器内重新加载，不改变浏览器地址栏
+            const url = new URL('{{ url_for("main.infer_rtsp_material", project_id=project.id) }}', window.location.origin);
             url.searchParams.set('per_page', perPage);
             url.searchParams.set('page', 1); // 重置到第一页
-            window.location.href = url.toString();
+            gotoMaterialPage(url.toString(), perPageSelect);
         });
         
     });

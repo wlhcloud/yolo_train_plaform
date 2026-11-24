@@ -3,6 +3,10 @@
 .lingma/
 .git/
 YOLOv8Web.zip
+static/datasets
+static/uploads
+static/inference_results=======
+YOLOv8Web.zip
 static/inference_material
 static/inference_results
 static/uploads
@@ -12,6 +16,4 @@ projects
 your_database.db
 runs
 instance
-db
 __pycache__
-

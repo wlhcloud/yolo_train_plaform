@@ -269,8 +269,8 @@
                     </li>
                 </ul>
 
-                <!-- Iframe容器：承载三种推理素材的具体页面，与图片管理页面样式一致 -->
-                <div id="iframeContainer" 
+                <!-- Avalon include 容器：承载三种推理素材的具体页面，分页通过更新 model.PageCodeRdm 在容器内重新加载，父页面地址栏永不改变 -->
+                <div id="iframeContainer"
                         ms-include-src="PageCodeRdm" data-include-rendered='Temprender'
                     style="width: 100%;
     padding-top: 10px;
@@ -361,17 +361,16 @@
 
     var model = avalon.define({
 		$id: "main_bs_controller",
-        PageCode: "/static/js/avalon/Loading", //需要加载的模板
-		PageCodeRdm: "/static/js/avalon/Loading.html", //需要加载的模板
-		rdm: Math.random(), //随机数
+        PageCode: "/static/js/avalon/Loading",
+		PageCodeRdm: "/static/js/avalon/Loading.html",
+		rdm: Math.random(),
 		Temprender: function() {
-			
-		} //组件加载完成事件
+
+		}
         });
 	avalon.ready(function() {
-        const infertabid=  localStorage.getItem("infertabid");
-		// 触发默认Tab的切换逻辑
-        const defaultTab = document.getElementById(infertabid||"infer-image-tab");
+        const infertabid = localStorage.getItem("infertabid");
+        const defaultTab = document.getElementById(infertabid || "infer-image-tab");
         if (defaultTab) {
             inferenceTab(defaultTab);
         }
@@ -381,6 +380,8 @@
     let isInferring = false;
     let startX = 0, startY = 0, isSelecting = false;
     let currentMaterial = null;
+    // 当前打开的"素材配置"layer 索引，配置页保存成功后通过 postMessage('close') 通知父页面
+    let configLayerIndex = null;
     const projectId = '{{project.id}}'
     const selectionBox = document.getElementById('selectionBox');
     const imagePreviewContainer = document.getElementById('imagePreviewContainer');
@@ -498,10 +499,10 @@
         const staticBaseUrl = `${window.location.origin}/static/`;
         const imageSrc = staticBaseUrl + `${material.path}`; // 或使用后端提供的素材访问接口
 
-        // 获取iframe元素
-        layer.open({
+        // 记录当前打开的配置弹窗索引，供保存后关闭
+        configLayerIndex = layer.open({
                 title:"素材配置与区域框选",
-                type: 2, 
+                type: 2,
                 area: ['90%', '90%'],
                 content: `/api/material/${projectId}/config/${material.id}` //这里content是一个普通的String
         });
@@ -524,39 +525,13 @@
         // 给当前点击的Tab添加active高亮状态
         tabLink.classList.add('active');
         tabLink.setAttribute('aria-current', 'page');
-        localStorage.setItem("infertabid",tabLink.getAttribute("id"));
+        localStorage.setItem("infertabid", tabLink.getAttribute("id"));
+
         const iframeUrl = tabLink.dataset.iframeUrl;
-        const iframeContainer = document.getElementById('iframeContainer');
+        if (!iframeUrl) return;
+
+        // avalon include 容器内重新加载，父页面地址栏不变
         model.PageCodeRdm = iframeUrl;
-
-        // if (!iframeUrl || iframeUrl === '#') {
-        //     iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #999;">暂无可用内容</div>';
-        //     return;
-        // }
-
-        // let iframe = iframeContainer.querySelector('iframe');
-        // if (iframe) {
-        //     iframe.src = iframeUrl;
-        // } else {
-        //     // 动态创建新iframe并插入容器，保持与图片管理页面一致的配置
-        //     iframe = document.createElement('iframe');
-        //     iframe.id = 'materialIframe'
-        //     iframe.src = iframeUrl;
-        //     iframe.width = '100%';
-        //     iframe.height = '100%';
-        //     iframe.frameBorder = '0';
-        //     iframe.allowFullscreen = true;
-
-        //     iframe.onload = function () {
-        //         console.log(`[${tabLink.innerText}] 推理素材页面加载完成`);
-        //     };
-        //     iframe.onerror = function () {
-        //         iframeContainer.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #f56c6c;">内容加载失败，请重试</div>';
-        //     };
-
-        //     iframeContainer.innerHTML = '';
-        //     iframeContainer.appendChild(iframe);
-        // }
     }
 
     /**
@@ -639,38 +614,12 @@
         layer.closeAll();
     }
 
-    // 监听Iframe发送的消息
-    // window.addEventListener('message', function (event) {
-    //     if (!window.ALLOWED_ORIGINS.includes(event.origin)) return;
-
-    //     if (event.data.type === 'deleteMaterial') {
-    //         const ids = event.data.data;
-    //         deleteMaterial(ids);
-    //     }
-    //     if (event.data.type === 'close') {
-    //         closeMaterialConfigModal();
-    //     }
-    //     if (event.data.type === 'openResultModal') {
-    //         const { projectId, materialId } = event.data;
-    //         // 1. 设置弹窗iframe的src为你的结果接口
-    //         const resultIframe = document.getElementById('resultIframe');
-    //         resultIframe.src = `/api/inference/${projectId}/result/${materialId}`;
-
-    //         // 2. 打开弹窗
-    //         const modal = new bootstrap.Modal(document.getElementById('resultModal'));
-    //         modal.show();
-    //     }
-    //     if (event.data.type === 'openServerFileModal') {
-    //         const { projectId, fileType } = event.data;
-    //         console.log(projectId, fileType)
-    //         // 打开弹窗
-    //         const modal = new bootstrap.Modal(document.getElementById('serverPathModal'));
-    //         modal.show();
-
-    //         const typeInput = document.querySelector("#serverPathForm input[name='type']");
-    //         typeInput.value = fileType;  // 给它赋值
-
-    //     }
-    // });
+    // 监听Iframe发送的消息：配置页保存成功后通过 postMessage('close') 关闭弹窗
+    window.addEventListener('message', function (event) {
+        if (event.origin !== window.location.origin) return;
+        if (event.data && event.data.type === 'close') {
+            closeMaterialConfigModal();
+        }
+    });
 </script>
 {% endblock %}

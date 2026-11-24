@@ -73,6 +73,32 @@ class Label(db.Model):
     )
 
 
+class SurveyStat(db.Model):
+    """交通量调查：每分钟每类别统计。
+
+    由文件夹调查推理（services/survey_service.py）写入；
+    Excel 的 5 分钟时段表由这些分钟级数据聚合得到。
+    """
+    __tablename__ = "survey_stat"
+    __table_args__ = (
+        db.Index(
+            "ix_survey_stat_query",
+            "project_id", "survey_date", "spot_name", "direction", "minute_of_day",
+        ),
+        {"schema": "yolov8_platform"},
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, nullable=False)  # 项目ID（命令行跑时可为0）
+    survey_date = db.Column(db.String(10), nullable=False)  # 调查日期 YYYY-MM-DD
+    spot_name = db.Column(db.String(200), nullable=False)  # 地点名称（调查点一级目录）
+    road = db.Column(db.String(100), nullable=False)  # 调查道路（二级目录）
+    direction = db.Column(db.String(50), nullable=False)  # 运行方向（三级目录）
+    minute_of_day = db.Column(db.Integer, nullable=False)  # 一天内的分钟数 0-1439
+    category = db.Column(db.String(50), nullable=False)  # 中文类别（label.target）
+    count = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class Annotation(db.Model):
     __tablename__ = "annotation"
     __table_args__ = {"schema": "yolov8_platform"}

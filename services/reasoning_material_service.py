@@ -15,7 +15,7 @@ from loguru import logger as log
 
 class ReasoningMaterialService:
     IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-    VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".flv"}
+    VIDEO_EXTS = {".mp4", ".avi", ".wmv", ".mov", ".mkv", ".flv", ".mts", ".m2ts", ".ts"}
     BASE_DIR = "/"
 
     def __init__(self):
@@ -190,7 +190,12 @@ class ReasoningMaterialService:
         wb.save(file_path)
 
     @staticmethod
-    def aggregate_by_category(materials, project_name):
+    def aggregate_by_category(materials, project_name, only_approaching=False):
+        """
+        按素材分类聚合统计每个类别的目标数量。
+        :param only_approaching: True 时只统计轨迹"由远到近"的物体（依据 track_summary.is_approaching）；
+                                 对于没有 track_summary 字段的素材（旧数据/图片素材）将跳过。
+        """
         category_map = defaultdict(lambda: defaultdict(int))
         all_labels = set()
 
@@ -202,9 +207,26 @@ class ReasoningMaterialService:
             success = result_json.get("success", False)
             if not success:
                 continue
-            class_counts = result_json.get("result", {}).get("class_counts", {})
-            if not class_counts:
-                continue
+
+            inner = result_json.get("result", {}) or {}
+            track_summary = inner.get("track_summary", {}) or {}
+
+            if only_approaching:
+                # 仅基于"由远到近"轨迹重建 class_counts；旧数据/图片素材没有 track_summary 则跳过
+                if not track_summary:
+                    continue
+                class_counts = {}
+                for _tid, info in track_summary.items():
+                    if not isinstance(info, dict) or not info.get("is_approaching"):
+                        continue
+                    cn = info.get("class_name") or "unknown"
+                    class_counts[cn] = class_counts.get(cn, 0) + 1
+                if not class_counts:
+                    continue
+            else:
+                class_counts = inner.get("class_counts", {})
+                if not class_counts:
+                    continue
 
             if m.material_type == 1:
                 category = m.source_type or m.filename  # 如果图片没有分类就使用名称
@@ -225,6 +247,7 @@ class ReasoningMaterialService:
             "project_name": project_name,
             "labels": sorted(all_labels),
             "rows": rows,
+            "only_approaching": only_approaching,
         }
 
     def update_material(self, material_id, result=None, status=None):

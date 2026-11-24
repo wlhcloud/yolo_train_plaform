@@ -41,8 +41,11 @@
 
     <div class="d-flex justify-content-between mb-3">
         <div class="d-flex align-items-center gap-2">
+            <button id="saveMaterialConfigBtn" class="btn btn-primary">
+                <i class="fas fa-check"></i> 保存配置
+            </button>
             <button id="syncMaterialConfig" class="btn btn-success">
-                <i class="fas fa-save"></i> 应用到所有素材
+                <i class="fas fa-share-square"></i> 应用到所有素材
             </button>
         </div>
     </div>
@@ -207,33 +210,28 @@
 
     // 初始化Fabric.js画布
     document.addEventListener('DOMContentLoaded', function () {
-        // initPage()
+        // 该页面以 layer iframe 形式独立加载，必须在这里自行初始化画布。
+        // 之前仅依赖父页面 postMessage 'load' 触发，而父页面从未发送该消息，导致打开配置后画面空白。
+        initPage();
 
         // 绑定标签保存按钮事件
         document.getElementById('saveLabelBtn').addEventListener('click', createLabel);
         document.getElementById('updateLabelBtn').addEventListener('click', updateLabel);
-        document.getElementById('syncMaterialConfig').addEventListener('click', syncMaterialConfig)
+        document.getElementById('syncMaterialConfig').addEventListener('click', syncMaterialConfig);
+        // 单素材保存按钮：直接调用 saveMaterialConfig，不再依赖外部 postMessage
+        document.getElementById('saveMaterialConfigBtn').addEventListener('click', saveMaterialConfig);
     });
 
-
-
-    window.addEventListener('message', (event) => {
-        if (event.data.type === 'load') {
-            initPage()
-            canvasInited = true;
-        }
-        if (event.data.type === 'save') {
-            saveMaterialConfig()
-        }
-    });
+    // 注意：原 'load' / 'save' 两个 postMessage 分支均无任何发送方，属于死代码，已由 DOMContentLoaded 自启 + 单素材保存按钮取代
     function initPage() {
         if (canvasInited) return;
+        canvasInited = true;
 
         initCanvas();
         loadLabels();
     }
     function initCanvas() {
-        // 1. 清理旧状态 
+        // 1. 清理旧状态
         isDrawing = false;
         currentPolygon = null;
         polygonPoints = [];
@@ -244,6 +242,9 @@
         }
 
         const img = new Image();
+        img.onerror = function () {
+            layer.msg('素材画面加载失败，请确认素材封面文件是否存在');
+        };
         img.src = "{{ url_for('static', filename=materials.cover_image) }}";
 
         img.onload = function () {
@@ -372,9 +373,9 @@
             if (confirm('确定要清空所有标注吗？此操作不可撤销。')) {
                 canvas.clear();
 
-                // 重新设置背景图片
+                // 重新设置背景图片（统一使用素材封面首帧，避免把视频/RTSP 地址当图片加载导致画面空白）
                 const img = new Image();
-                img.src = "{{ url_for('static', filename=materials.path) }}";
+                img.src = "{{ url_for('static', filename=materials.cover_image) }}";
 
                 img.onload = function () {
                     const maxWidth = document.querySelector('.canvas-container').offsetWidth;

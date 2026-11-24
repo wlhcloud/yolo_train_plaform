@@ -171,9 +171,97 @@
                                     </tbody>
                                 </table>
                             </div>
-                        </div>
-                    </div>
-                </div>
+                            </div>
+                            </div>
+
+                            <div class="card mb-4">
+                            <div class="card-header">
+                                <i class="fas fa-folder-tree me-1"></i>文件夹调查推理（交通量调查表）
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-2">
+                                    <label class="form-label">选择模型</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="surveyModelType"
+                                            id="surveyModelSystem" value="system" checked>
+                                        <label class="form-check-label" for="surveyModelSystem">使用系统训练模型</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="surveyModelType"
+                                            id="surveyModelUploaded" value="uploaded">
+                                        <label class="form-check-label" for="surveyModelUploaded">已上传模型</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="surveyModelType"
+                                            id="surveyModelExisting" value="existing">
+                                        <label class="form-check-label" for="surveyModelExisting">已存在模型</label>
+                                    </div>
+                                </div>
+
+                                <div class="mb-2" id="surveySystemModelOptions">
+                                    <label for="surveySystemModelSelect" class="form-label">系统模型</label>
+                                    <select class="form-select form-select-sm" id="surveySystemModelSelect">
+                                        <option value="">选择系统训练的模型</option>
+                                        {% if best_model_exists %}
+                                        <option value="best.pt">best.pt (项目训练的最佳模型)</option>
+                                        {% endif %}
+                                        {% if last_model_exists %}
+                                        <option value="last.pt">last.pt (项目最后训练的模型)</option>
+                                        {% endif %}
+                                    </select>
+                                </div>
+
+                                <div class="mb-2" id="surveyUploadedModelOptions" style="display: none;">
+                                    <label for="surveyUploadedModelSelect" class="form-label">已上传模型</label>
+                                    <select class="form-select form-select-sm" id="surveyUploadedModelSelect">
+                                        <option value="">选择已上传的模型文件</option>
+                                        {% for model in uploaded_models %}
+                                        <option value="{{ model }}">{{ model }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <div class="mb-2" id="surveyExistingModelOptions" style="display: none;">
+                                    <label for="surveyExistingModelSelect" class="form-label">已存在模型</label>
+                                    <select class="form-select form-select-sm" id="surveyExistingModelSelect">
+                                        <option value="">选择已存在的模型文件</option>
+                                        {% for model in existing_models %}
+                                        <option value="{{ model }}">{{ model }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <div class="mb-2">
+                                    <label for="surveyFolderPath" class="form-label">视频根文件夹（服务端路径）</label>
+                                    <input type="text" class="form-control" id="surveyFolderPath"
+                                        placeholder="如 E:/调查视频/和平里东街 -路口南50米处 12-25 XT">
+                                    <div class="form-text">
+                                        目录结构：调查点名称/调查道路/运行方向/视频文件。<br>
+                                        视频文件名需含时间段，如「6：00-6：30.MTS」，将按时间正序识别，
+                                        每 5 分钟一个时段，按上方分类映射自动统计，
+                                        并在「运行方向」文件夹生成交通量调查统计表 Excel。
+                                    </div>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="surveyOnlyApproaching">
+                                    <label class="form-check-label" for="surveyOnlyApproaching"
+                                        title="仅统计运动轨迹由远到近的物体">
+                                        仅统计由远到近
+                                    </label>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-primary" id="surveyStartBtn">
+                                    <i class="fas fa-play me-1"></i>开始调查推理
+                                </button>
+                                <div id="surveyProgressBox" style="display: none;" class="mt-3">
+                                    <div class="progress" style="height: 18px;">
+                                        <div id="surveyProgressBar" class="progress-bar" style="width: 0%;">0%</div>
+                                    </div>
+                                    <div id="surveyProgressText" class="small text-muted mt-1"></div>
+                                    <div id="surveyExcelList" class="mt-2"></div>
+                                </div>
+                                </div>
+                                </div>
+                                </div>
 
                 <div class="col-md-8">
                     <div class="card">
@@ -200,6 +288,12 @@
                                     onclick="stopInference('{{ project.id }}',null)">
                                     停止推理
                                 </button>
+                                <div class="form-check form-check-inline mb-0">
+                                    <input class="form-check-input" type="checkbox" id="onlyApproachingChk">
+                                    <label class="form-check-label" for="onlyApproachingChk" title="仅统计运动轨迹由远到近的物体">
+                                        仅由远到近
+                                    </label>
+                                </div>
                                 <button class="btn btn-sm btn-success" onclick="exportZip()">
                                     <i class="fas fa-file-archive"></i> 导出
                                 </button>
@@ -292,6 +386,7 @@
         rdm: Math.random(),
         Temprender: function () {
             console.log("渲染完成")
+            positionInferenceButtons()
         }
     });
 
@@ -301,10 +396,26 @@
         PageCode: "/static/js/avalon/Loading",
         PageCodeRdm: "{{ url_for('main.api_complex_reasoning_page') }}",
         rdm: Math.random(),
-        Temprender: function () { }
+        Temprender: function () {
+            positionInferenceButtons()
+        }
     });
     avalon.ready(function () {
     });
+
+    function positionInferenceButtons() {
+        const materialAction = document.getElementById('materialInferenceAction');
+        const complexAction = document.getElementById('complexInferenceAction');
+        const startInferenceBtn = document.getElementById('startInferenceBtn');
+        const runInference = document.getElementById('runInference');
+
+        if (materialAction && startInferenceBtn) {
+            materialAction.appendChild(startInferenceBtn);
+        }
+        if (complexAction && runInference) {
+            complexAction.appendChild(runInference);
+        }
+    }
 
     // 新增：推理类型切换函数
     function switchReasoningType(type) {
@@ -324,16 +435,16 @@
 
         if (type === 'complex') {
             // 显示综合推理，隐藏素材推理
-            startInferenceBtn.style.display = "inline-block"
-            runInference.style.display = "none"
+            startInferenceBtn.style.display = "none"
+            runInference.style.display = "inline-block"
             complexIframe.style.display = 'block';
             materialIframe.style.display = 'none';
             complexBtn.classList.remove('btn-outline-primary');
             complexBtn.classList.add('btn-primary');
         } else if (type === 'material') {
             // 显示素材推理，隐藏综合推理
-            startInferenceBtn.style.display = "none"
-            runInference.style.display = "inline-block"
+            startInferenceBtn.style.display = "inline-block"
+            runInference.style.display = "none"
             materialIframe.style.display = 'block';
             complexIframe.style.display = 'none';
             materialBtn.classList.remove('btn-outline-primary');
@@ -428,7 +539,15 @@
     // }
 
     function exportZip() {
-        window.location.href = "/api/project/{{project.id}}/export_zip";
+        const url = new URL(
+            "/api/project/{{project.id}}/export_zip",
+            window.location.origin
+        );
+        const chk = document.getElementById('onlyApproachingChk');
+        if (chk && chk.checked) {
+            url.searchParams.set('only_approaching', '1');
+        }
+        window.location.href = url.toString();
     }
 
     // 确保jQuery已加载
@@ -790,6 +909,146 @@
 
         // 页面初始化：默认选中综合推理
         switchReasoningType('complex');
+
+        // ==================== 文件夹调查推理（交通量调查表） ====================
+        let surveyPollTimer = null;
+
+        function switchSurveyModelType() {
+            const type = document.querySelector('input[name="surveyModelType"]:checked').value;
+            document.getElementById('surveySystemModelOptions').style.display = (type === 'system') ? '' : 'none';
+            document.getElementById('surveyUploadedModelOptions').style.display = (type === 'uploaded') ? '' : 'none';
+            document.getElementById('surveyExistingModelOptions').style.display = (type === 'existing') ? '' : 'none';
+        }
+
+        document.querySelectorAll('input[name="surveyModelType"]').forEach(el => {
+            el.addEventListener('change', switchSurveyModelType);
+        });
+
+        // 开始调查推理（按钮在卡片内，此处绑定，避免内联 onclick 取不到闭包内函数）
+        document.getElementById('surveyStartBtn').addEventListener('click', startSurveyInference);
+
+        // 无系统模型时（未训练 best.pt/last.pt），自动切到可用的模型来源
+        (function initSurveyModelDefault() {
+            const sysSel = document.getElementById('surveySystemModelSelect');
+            const hasSystem = Array.from(sysSel.options).some(o => o.value);
+            const hasUploaded = document.getElementById('surveyUploadedModelSelect').options.length > 1;
+            const hasExisting = document.getElementById('surveyExistingModelSelect').options.length > 1;
+            if (!hasSystem) {
+                if (hasUploaded) {
+                    document.getElementById('surveyModelUploaded').checked = true;
+                } else if (hasExisting) {
+                    document.getElementById('surveyModelExisting').checked = true;
+                }
+            }
+            switchSurveyModelType();
+        })();
+
+        function startSurveyInference() {
+            const folder = document.getElementById('surveyFolderPath').value.trim();
+            if (!folder) {
+                layer.msg('请填写视频根文件夹路径（服务端目录）');
+                return;
+            }
+            const modelType = document.querySelector('input[name="surveyModelType"]:checked').value;
+            const payload = {
+                folder: folder,
+                model_type: modelType,
+                only_approaching: document.getElementById('surveyOnlyApproaching').checked
+            };
+            if (modelType === 'system') {
+                payload.system_model = document.getElementById('surveySystemModelSelect').value;
+                if (!payload.system_model) { layer.msg('请选择系统模型'); return; }
+            } else if (modelType === 'uploaded') {
+                payload.uploaded_model = document.getElementById('surveyUploadedModelSelect').value;
+                if (!payload.uploaded_model) { layer.msg('请选择已上传模型'); return; }
+            } else if (modelType === 'existing') {
+                payload.existing_model = document.getElementById('surveyExistingModelSelect').value;
+                if (!payload.existing_model) { layer.msg('请选择已存在模型'); return; }
+            }
+
+            fetch('{{ url_for("main.start_survey_inference", project_id=project.id) }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+                .then(r => r.json())
+                .then(resp => {
+                    if (resp.success) {
+                        layer.msg('调查推理已开始');
+                        document.getElementById('surveyProgressBox').style.display = 'block';
+                        document.getElementById('surveyExcelList').innerHTML = '';
+                        updateSurveyProgress({ status: 'loading_model', done: 0, total: 0 });
+                        if (surveyPollTimer) clearInterval(surveyPollTimer);
+                        surveyPollTimer = setInterval(pollSurveyStatus, 2000);
+                    } else {
+                        layer.msg(resp.message || resp.error || '启动失败');
+                    }
+                })
+                .catch(err => layer.msg('请求失败: ' + err));
+        }
+
+        function pollSurveyStatus() {
+            fetch('{{ url_for("main.survey_inference_status", project_id=project.id) }}')
+                .then(r => r.json())
+                .then(resp => {
+                    if (!resp.success) return;
+                    if (resp.status === 'idle') return; // 尚无任务
+                    updateSurveyProgress(resp);
+                    if (!resp.running) {
+                        clearInterval(surveyPollTimer);
+                        surveyPollTimer = null;
+                        if (resp.status === 'error') {
+                            layer.msg('调查推理失败: ' + (resp.error || '未知错误'));
+                        }
+                    }
+                })
+                .catch(() => { });
+        }
+
+        function updateSurveyProgress(resp) {
+            const bar = document.getElementById('surveyProgressBar');
+            const text = document.getElementById('surveyProgressText');
+            const list = document.getElementById('surveyExcelList');
+
+            if (resp.status === 'loading_model') {
+                bar.style.width = '0%';
+                bar.textContent = '0%';
+                text.textContent = '正在加载模型...';
+                return;
+            }
+
+            let percent = 0;
+            if (resp.total > 0) percent = Math.round(resp.done * 100 / resp.total);
+            bar.style.width = percent + '%';
+            bar.textContent = percent + '%';
+
+            let msg = '';
+            if (resp.status === 'finished') {
+                msg = `推理完成：共 ${resp.total || ''} 个视频`;
+            } else if (resp.status === 'error') {
+                msg = '推理失败：' + (resp.error || '');
+            } else {
+                msg = `已完成 ${resp.done}/${resp.total} 个视频`;
+                if (resp.current_file) {
+                    msg += `，当前：${resp.current_file}`;
+                    if (resp.frame_total > 0) {
+                        msg += `（帧进度 ${resp.frame_done}/${resp.frame_total}）`;
+                    }
+                }
+            }
+            text.textContent = msg;
+
+            // 已生成的 Excel 列表（带下载链接；index 为动态参数，手动拼接路由）
+            if (resp.excels && resp.excels.length) {
+                const base = `/project/${'{{ project.id }}'}/inference/survey/excel/`;
+                list.innerHTML = resp.excels.map(e =>
+                    `<div class="mb-1">
+                        <i class="fas fa-file-excel text-success"></i>
+                        <a href="${base}${e.index}" download>${e.spot} / ${e.road} / ${e.direction}（${e.video_count}个视频，${e.track_count}个目标）</a>
+                    </div>`
+                ).join('');
+            }
+        }
 
 
         // 开始推理
