@@ -262,7 +262,7 @@ class RoadSurveyApp {
     this.$("directions").innerHTML = this.config.directions
       .map(
         (d, di) =>
-          `<section class="mb-4"><div class="survey-toolbar">${this.input(`directions.${di}.name`, d.name, "text", "方向名称")}<button class="btn btn-outline-secondary btn-sm" data-action="add-stream" data-di="${di}">添加机位序列</button><button class="btn btn-outline-danger btn-sm" data-action="remove-direction" data-di="${di}">移除方向</button></div>${d.streams.map((s, si) => `<div class="stream-panel"><div class="survey-toolbar">${this.input(`directions.${di}.streams.${si}.name`, s.name, "text", "机位序列名称")}${this.input(`directions.${di}.streams.${si}.start_time`, s.start_time, "time", "首段拍摄起始时间")}<button class="btn btn-outline-danger btn-sm" data-action="remove-stream" data-di="${di}" data-si="${si}">移除机位</button></div><div class="text-hint mt-2">卡目录按下列顺序处理；间隔为该卡开始前的停录秒数，连续录像填 0。</div>${s.cards.map((c, ci) => `<div class="cards-row">${this.input(`directions.${di}.streams.${si}.cards.${ci}.folder`, c.folder, "text", `第${ci + 1}张卡目录`)}${this.input(`directions.${di}.streams.${si}.cards.${ci}.gap_seconds`, c.gap_seconds, "number", "开始前间隔（秒）")}<div class="survey-toolbar align-self-end">${["up", "down", "remove-card"].map((a, i) => `<button class="btn btn-outline-secondary btn-sm" data-action="${a}" data-di="${di}" data-si="${si}" data-ci="${ci}">${["上移", "下移", "移除"][i]}</button>`).join("")}</div></div>`).join("")}<button class="btn btn-outline-primary btn-sm mt-2" data-action="add-card" data-di="${di}" data-si="${si}">添加下一张卡</button><div class="text-hint mt-2">已配置区域：${this.escape(Object.keys(s.regions || {}).join("、") || "未配置，请扫描后画区域")}</div></div>`).join("")}</section>`,
+          `<section class="mb-4"><div class="survey-toolbar">${this.input(`directions.${di}.name`, d.name, "text", "方向名称")}<button class="btn btn-outline-secondary btn-sm" data-action="add-stream" data-di="${di}">添加机位序列</button><button class="btn btn-outline-danger btn-sm" data-action="remove-direction" data-di="${di}">移除方向</button></div>${d.streams.map((s, si) => `<div class="stream-panel"><div class="survey-toolbar">${this.input(`directions.${di}.streams.${si}.name`, s.name, "text", "机位序列名称")}${this.input(`directions.${di}.streams.${si}.start_time`, s.start_time, "time", "首段拍摄起始时间")}<button class="btn btn-outline-danger btn-sm" data-action="remove-stream" data-di="${di}" data-si="${si}">移除机位</button></div><div class="text-hint mt-2">视频目录按下列顺序处理；可选普通视频目录或一卡、二卡目录。间隔为下一目录开始前的停录秒数，连续录像填 0。</div>${s.cards.map((c, ci) => `<div class="cards-row">${this.input(`directions.${di}.streams.${si}.cards.${ci}.folder`, c.folder, "text", `第${ci + 1}个视频目录`)}${this.input(`directions.${di}.streams.${si}.cards.${ci}.gap_seconds`, c.gap_seconds, "number", "开始前间隔（秒）")}<div class="survey-toolbar align-self-end">${["up", "down", "remove-card"].map((a, i) => `<button class="btn btn-outline-secondary btn-sm" data-action="${a}" data-di="${di}" data-si="${si}" data-ci="${ci}">${["上移", "下移", "移除"][i]}</button>`).join("")}</div></div>`).join("")}<button class="btn btn-outline-primary btn-sm mt-2" data-action="add-card" data-di="${di}" data-si="${si}">添加下一视频目录</button><div class="text-hint mt-2">已配置区域：${this.escape(Object.keys(s.regions || {}).join("、") || "未配置，请扫描后画区域")}</div></div>`).join("")}</section>`,
       )
       .join("");
     this.$("classMapping").innerHTML = this.labels
@@ -424,6 +424,16 @@ class RoadSurveyApp {
       n = Math.floor(seconds % 86400);
     return `${day ? "次日+" + (day - 1) + " " : ""}${String(Math.floor(n / 3600)).padStart(2, "0")}:${String(Math.floor(n / 60) % 60).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
   }
+  sourceLabel(stream, file) {
+    const source = this.config.directions[stream.direction_index]?.streams[stream.stream_index];
+    const folder = source?.cards?.[file.card - 1]?.folder;
+    if (!folder) return file.card_label || "视频目录";
+    const name = folder.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1);
+    const match = name.match(/^(?:第)?([1-9]|[1-5][0-9]|6[0-4]|[一二三四五六七八九十])(?:张)?卡?$/) || name.match(/^卡([1-9]|[1-5][0-9]|6[0-4]|[一二三四五六七八九十])$/);
+    if (!match) return "视频目录";
+    const n = Number(match[1]);
+    return (n >= 1 && n <= 10 ? "一二三四五六七八九十"[n - 1] : match[1]) + "卡";
+  }
   renderTimeline() {
     if (!this.manifest) {
       this.$("timeline").innerHTML =
@@ -435,7 +445,7 @@ class RoadSurveyApp {
       this.manifest.streams
         .map(
           (s) =>
-            `<details class="mb-3" open><summary>${this.escape(s.direction)} / ${this.escape(s.name)}（${s.files.length}段）</summary><button class="btn btn-outline-primary btn-sm my-2" data-edit-region="${s.key}">核对画面 / 配置主辅路区域</button><div class="survey-timeline"><table class="table table-sm"><thead><tr><th>顺序</th><th>卡</th><th>文件</th><th>时长</th><th>起始时间</th><th>结束时间</th></tr></thead><tbody>${s.files.map((f, i) => `<tr><td>${i + 1}</td><td>${f.card}</td><td title="${this.escape(f.path)}">${this.escape(f.name)}</td><td>${f.duration.toFixed(2)}秒</td><td>${this.formatTime(f.start)}</td><td>${this.formatTime(f.end)}</td></tr>`).join("")}</tbody></table></div></details>`,
+            `<details class="mb-3" open><summary>${this.escape(s.direction)} / ${this.escape(s.name)}（${s.files.length}段）</summary><button class="btn btn-outline-primary btn-sm my-2" data-edit-region="${s.key}">核对画面 / 配置主辅路区域</button><div class="survey-timeline"><table class="table table-sm"><thead><tr><th>顺序</th><th>来源</th><th>文件</th><th>时长</th><th>起始时间</th><th>结束时间</th></tr></thead><tbody>${s.files.map((f, i) => `<tr><td>${i + 1}</td><td>${this.escape(this.sourceLabel(s, f))}</td><td title="${this.escape(f.path)}">${this.escape(f.name)}</td><td>${f.duration.toFixed(2)}秒</td><td>${this.formatTime(f.start)}</td><td>${this.formatTime(f.end)}</td></tr>`).join("")}</tbody></table></div></details>`,
         )
         .join("");
   }
@@ -553,7 +563,7 @@ class RoadSurveyApp {
     this.$("frameFile").innerHTML = s.files
       .map(
         (f, i) =>
-          `<option value="${i}">第${f.card}张卡 / ${this.escape(f.name)}</option>`,
+          `<option value="${i}">${this.escape(this.sourceLabel(s, f))} / ${this.escape(f.name)}</option>`,
       )
       .join("");
     this.$("regionDialog").showModal();

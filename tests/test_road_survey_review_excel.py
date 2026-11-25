@@ -27,6 +27,14 @@ class ReviewExcelTest(unittest.TestCase):
                     "key": str(index),
                     "direction": direction["name"],
                     "name": "机位",
+                    "files": [
+                        {
+                            "start": 25200,
+                            "end": 25500,
+                            "card": index + 1,
+                            "card_label": ["一卡", "二卡"][index],
+                        }
+                    ],
                 }
                 path = Path(directory) / f"{index}.json"
                 path.write_text(json.dumps(item), encoding="utf-8")
@@ -58,6 +66,10 @@ class ReviewExcelTest(unittest.TestCase):
                     sheet = workbook.active
                     self.assertEqual(sheet.max_row, 3)
                     self.assertEqual(sheet["H3"].value, "07:00-07:05")
+                    self.assertEqual(
+                        sheet["E3"].value,
+                        "测试道路（一卡）" if "北向南" in name else "测试道路（二卡）",
+                    )
                     total += sum(v or 0 for v in list(sheet.values)[2][8:])
                 self.assertEqual(total, 2)
                 self.assertEqual(
@@ -159,6 +171,34 @@ class ReviewExcelTest(unittest.TestCase):
         self.assertIn("未配置", w["5分钟"]["H4"].comment.text)
         self.assertEqual(w["5分钟"]["E3"].data_type, "s")
         self.assertEqual(w["5分钟"]["E3"].value, "=1+1")
+
+    def test_review_card_label_uses_only_sampled_interval(self):
+        audit, snapshot = self.fixture()
+        audit["stream"]["files"] = [
+            {"start": 25200, "end": 25495, "card": 1, "card_label": "一卡"},
+            {"start": 25495, "end": 25800, "card": 2, "card_label": "二卡"},
+            {"start": 25800, "end": 26100, "card": 3, "card_label": "三卡"},
+        ]
+        workbook = load_workbook(build_review_excel(audit, snapshot))
+        self.assertEqual(workbook["5分钟"]["E3"].value, "测试道路（一卡、二卡）")
+        self.assertEqual(workbook["5分钟"]["E5"].value, "测试道路（二卡）")
+        audit["start"] = 25495
+        workbook = load_workbook(build_review_excel(audit, snapshot))
+        self.assertEqual(workbook["5分钟"]["E3"].value, "测试道路（二卡）")
+
+    def test_plain_directory_review_keeps_road_name(self):
+        audit, snapshot = self.fixture()
+        audit["stream"]["files"] = [
+            {
+                "start": 25200,
+                "end": 25800,
+                "card": 1,
+                "path": r"E:\道路\西向东主路6：50-9：50\00000.MTS",
+            }
+        ]
+        snapshot["source"]["cards"] = [{"folder": r"E:\道路\西向东主路6：50-9：50"}]
+        workbook = load_workbook(build_review_excel(audit, snapshot))
+        self.assertEqual(workbook["5分钟"]["E3"].value, "测试道路")
 
 
 if __name__ == "__main__":

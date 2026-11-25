@@ -64,5 +64,5 @@
  <p class="text-hint mt-2">抽查会预热最多10秒追踪，再独立复算该时段；边界计数可能与全程统计略有差异，正式表格不会被覆盖。录像不足5分钟时只生成实际可用时长，停录处显示“无录像”。</p>
 </dialog>
 {% endblock %}
-{% block extra_js %}<script src="{{ url_for('static', filename='js/road_surveys.js', v='11') }}"></script><script src="{{ url_for('static', filename='js/road_survey_review.js', v='6') }}"></script>
+{% block extra_js %}<script src="{{ url_for('static', filename='js/road_surveys.js', v='12') }}"></script><script src="{{ url_for('static', filename='js/road_survey_review.js', v='6') }}"></script>
 <script>window.roadSurveyApp = new RoadSurveyApp({projectId: {{ project.id }}, labels: {{ labels|tojson }}, categories: {{ categories|tojson }}, exclude: {{ exclude|tojson }}}); window.roadSurveyApp.reviewPlayer=new RoadSurveyReviewUI(window.roadSurveyApp);</script>{% endblock %}

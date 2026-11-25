@@ -19,6 +19,7 @@ import numpy as np
 
 VIDEO_EXTENSIONS = {".mts", ".m2ts", ".mp4", ".mov", ".avi", ".mkv", ".ts"}
 ROAD_TYPES = ("主路", "辅路")
+EXPORT_VERSION = 3
 CATEGORIES = (
     "小客车",
     "出租车",
@@ -302,6 +303,7 @@ def scan_manifest(config, progress=lambda value: None, check_cancel=lambda: None
                         "path": str(path),
                         "name": path.name,
                         "card": ci + 1,
+                        "card_label": card_directory_label(card["folder"]),
                         "start": cursor,
                         "end": cursor + metadata["duration"],
                         "size": stat.st_size,
@@ -734,6 +736,73 @@ def safe_name(value):
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(value)).strip(" .")[:80] or "调查"
 
 
+def card_directory_label(folder):
+    name = re.split(r"[/\\]", str(folder).rstrip("/\\"))[-1]
+    match = re.fullmatch(
+        r"(?:第)?([1-9]|[1-5][0-9]|6[0-4]|[一二三四五六七八九十])(?:张)?(?:卡)?", name
+    )
+    if not match:
+        match = re.fullmatch(
+            r"卡([1-9]|[1-5][0-9]|6[0-4]|[一二三四五六七八九十])", name
+        )
+    if not match:
+        return ""
+    number = match[1]
+    chinese = {str(i): text for i, text in enumerate("一二三四五六七八九十", 1)}
+    return chinese.get(number, number) + "卡"
+
+
+def recording_card_label(item, source=None):
+    # Resolve legacy manifests using the saved source directory, not its list position.
+    if source is not None:
+        index = int(item.get("card", 0)) - 1
+        cards = source.get("cards", [])
+        if 0 <= index < len(cards):
+            return card_directory_label(cards[index]["folder"])
+    if "card_label" in item:
+        return item["card_label"]
+    if item.get("path"):
+        parts = re.split(r"[/\\]", item["path"])
+        parent = parts[-2] if len(parts) > 1 else ""
+        return card_directory_label(parent)
+    return ""
+
+
+def location_with_cards(road_name, files, start, end, source=None):
+    """Label a report interval with its actual recording-card sources."""
+    labels = list(
+        dict.fromkeys(
+            recording_card_label(item, source)
+            for item in sorted(files, key=lambda f: f["start"])
+            if item["start"] < end and item["end"] > start
+        )
+    )
+    labels = [label for label in labels if label]
+    return str(road_name) + ("（" + "、".join(labels) + "）" if labels else "")
+
+
+def report_source_files(config, manifest, direction, role):
+    files = []
+    for stream in manifest["streams"]:
+        if stream.get("direction") != direction:
+            continue
+        roles = stream.get("road_types")
+        source = stream.get("card_source")
+        if "direction_index" in stream and "stream_index" in stream:
+            source = config["directions"][stream["direction_index"]]["streams"][
+                stream["stream_index"]
+            ]
+            if roles is None:
+                roles = source.get("regions", {})
+        if roles is not None and role not in roles:
+            continue
+        files.extend(
+            {**item, "card_label": recording_card_label(item, source)}
+            for item in stream["files"]
+        )
+    return files
+
+
 def export_workbooks(config, manifest, completed, output_dir):
     """Template's 21 columns and merged headers, without its historic sample values."""
     from openpyxl import Workbook
@@ -750,6 +819,9 @@ def export_workbooks(config, manifest, completed, output_dir):
     exports = []
     for direction in config["directions"]:
         for role in ROAD_TYPES:
+            source_files = report_source_files(
+                config, manifest, direction["name"], role
+            )
             results = [
                 r for r in completed.values() if r["direction"] == direction["name"]
             ]
@@ -816,7 +888,9 @@ def export_workbooks(config, manifest, completed, output_dir):
                         index,
                         int(timestamp.strftime("%Y%m%d")),
                         str(config.get("spot_code", "")),
-                        config["road_name"],
+                        location_with_cards(
+                            config["road_name"], source_files, slot, slot + 300
+                        ),
                         role,
                         direction["name"],
                         timestamp.strftime("%H:%M") + "-" + finish.strftime("%H:%M"),

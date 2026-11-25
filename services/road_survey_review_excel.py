@@ -18,6 +18,7 @@ from services.road_survey_service import (
     ROAD_TYPES,
     covered_seconds,
     export_workbooks,
+    location_with_cards,
     safe_name,
 )
 
@@ -62,7 +63,21 @@ def build_road_review_zip(result, snapshot):
                 ],
             }
             manifest["streams"].append(
-                {"files": [{"start": part["start"], "end": part["end"]}]}
+                {
+                    **part["stream"],
+                    "road_types": list(part["source"]["regions"]),
+                    "card_source": part["source"],
+                    "files": [
+                        {
+                            **item,
+                            "start": max(item["start"], part["start"]),
+                            "end": min(item["end"], part["end"]),
+                        }
+                        for item in part["stream"].get("files", [])
+                        if item["start"] < part["end"] and item["end"] > part["start"]
+                    ]
+                    or [{"start": part["start"], "end": part["end"]}],
+                }
             )
             prefix = safe_name(
                 f"{index + 1}_{part['stream']['direction']}_{part['stream'].get('name', '机位')}"
@@ -269,7 +284,13 @@ def build_review_excel(audit, snapshot):
                     number,
                     int(absolute(slot).strftime("%Y%m%d")),
                     str(config.get("spot_code", "")),
-                    config["road_name"],
+                    location_with_cards(
+                        config["road_name"],
+                        stream.get("files", []),
+                        max(slot, start),
+                        min(slot + 300, end),
+                        source,
+                    ),
                     role,
                     stream["direction"],
                     slot_name(slot),

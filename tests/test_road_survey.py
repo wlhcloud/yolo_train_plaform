@@ -42,6 +42,77 @@ def configuration(folder):
 
 
 class RoadSurveyTest(unittest.TestCase):
+    def test_flat_road_directories_have_no_invented_card_labels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            road = Path(directory) / "南二环永定门桥上11月11日（3小时）"
+            names = [
+                "东向西主路6：50-9：50",
+                "西向东主路6：50-9：50",
+                "西向东辅路6：50-9：50",
+            ]
+            for name in names:
+                folder = road / name
+                folder.mkdir(parents=True)
+                (folder / "00000.MTS").touch()
+            discovered = service.discover_roads(directory)[0]
+            self.assertEqual(len(discovered["directions"]), 2)
+            config = configuration(directory)
+            config["road_name"] = discovered["road_name"]
+            config["directions"] = discovered["directions"]
+            for direction in config["directions"]:
+                for source in direction["streams"]:
+                    source["regions"] = {
+                        "辅路" if "辅路" in source["name"] else "主路": REGION
+                    }
+            with patch.object(
+                service,
+                "probe_video",
+                return_value={
+                    "duration": 10800,
+                    "fps": 25,
+                    "width": 1440,
+                    "height": 1080,
+                },
+            ):
+                manifest = service.scan_manifest(config)
+            self.assertEqual(len(manifest["streams"]), 3)
+            for stream in manifest["streams"]:
+                self.assertEqual(stream["files"][0]["card_label"], "")
+                stream["files"][0].pop(
+                    "card_label"
+                )  # Existing saved manifests also work.
+            with tempfile.TemporaryDirectory() as output:
+                exports = service.export_workbooks(config, manifest, {}, output)
+                self.assertEqual(len(exports), 4)
+                for report in exports:
+                    sheet = load_workbook(report["path"]).active
+                    self.assertEqual(sheet["E3"].value, config["road_name"])
+                    self.assertEqual(
+                        sheet.max_row, 38
+                    )  # Three hours, 36 five-minute rows.
+
+    def test_card_labels_use_actual_folder_number_and_legacy_source(self):
+        for folder, expected in [
+            ("1", "一卡"),
+            ("2", "二卡"),
+            ("一卡", "一卡"),
+            ("第2张卡", "二卡"),
+            ("卡三", "三卡"),
+            ("西向东主路6：50-9：50", ""),
+        ]:
+            self.assertEqual(service.card_directory_label(folder), expected)
+        files = [
+            {"path": r"E:\道路\西向东\2\00000.MTS", "card": 1, "start": 0, "end": 300}
+        ]
+        self.assertEqual(
+            service.location_with_cards("道路", files, 0, 300), "道路（二卡）"
+        )
+        # A numbered nested folder is not a card when the saved source is an ordinary directory.
+        source = {"cards": [{"folder": r"E:\道路\西向东主路"}]}
+        self.assertEqual(
+            service.location_with_cards("道路", files, 0, 300, source), "道路"
+        )
+
     @patch("services.road_survey_scheduler.integer_setting", return_value=0)
     @patch(
         "services.road_survey_scheduler.automatic_batch",
@@ -168,10 +239,22 @@ class RoadSurveyTest(unittest.TestCase):
             manifest = {
                 "streams": [
                     {
+                        "direction": "北向南",
+                        "road_types": ["主路"],
                         "files": [
-                            {"start": 25200, "end": 25500},
-                            {"start": 25510, "end": 25800},
-                        ]
+                            {
+                                "start": 25200,
+                                "end": 25440,
+                                "card": 1,
+                                "card_label": "一卡",
+                            },
+                            {
+                                "start": 25440,
+                                "end": 25800,
+                                "card": 2,
+                                "card_label": "二卡",
+                            },
+                        ],
                     }
                 ]
             }
@@ -200,10 +283,13 @@ class RoadSurveyTest(unittest.TestCase):
             self.assertEqual(sheet.max_column, 21)
             self.assertEqual(sheet["I3"].value, 2)
             self.assertEqual(sheet["I4"].value, 3)
+            self.assertEqual(sheet["E3"].value, config["road_name"] + "（一卡、二卡）")
+            self.assertEqual(sheet["E4"].value, config["road_name"] + "（二卡）")
             self.assertIsNone(sheet["H3"].comment)
             self.assertIn("290.00/300", sheet["H4"].comment.text)
             auxiliary = load_workbook(exports[1]["path"]).active
             self.assertIsNone(auxiliary["I3"].value)
+            self.assertEqual(auxiliary["E3"].value, config["road_name"])
             self.assertIsNotNone(auxiliary["H3"].comment)
             self.assertIn("K1:L1", {str(m) for m in sheet.merged_cells.ranges})
 
@@ -321,7 +407,10 @@ class RoadSurveyTest(unittest.TestCase):
         with (
             tempfile.TemporaryDirectory() as temp,
             patch.object(service.cv2, "VideoCapture", Capture),
-            patch('services.road_survey_scheduler.automatic_batch',side_effect=lambda size,fallback:fallback),
+            patch(
+                "services.road_survey_scheduler.automatic_batch",
+                side_effect=lambda size, fallback: fallback,
+            ),
             patch.dict(
                 "sys.modules", {"boxmot": types.SimpleNamespace(ByteTrack=Tracker)}
             ),

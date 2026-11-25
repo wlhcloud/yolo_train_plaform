@@ -339,6 +339,19 @@ def download(project_id, task_id):
     if task.status != "finished":
         raise ValueError("任务尚未完成")
     result = task.result or {}
+    if result.get("export_version") != service.EXPORT_VERSION:
+        # Refresh report formatting for existing finished tasks without rerunning inference.
+        with _lock:
+            output_dir = Path(current_app.instance_path) / "road_surveys" / str(task_id)
+            result = {
+                **result,
+                "exports": service.export_workbooks(
+                    task.config, task.manifest, result.get("completed", {}), output_dir
+                ),
+                "export_version": service.EXPORT_VERSION,
+            }
+            task.result = result
+            db.session.commit()
     exports = result.get("exports", [])
     index = request.args.get("index", type=int)
     if index is not None:
@@ -838,6 +851,7 @@ def worker(app, task_id, mode, stop, resume=False):
                 task.result = {
                     "completed": completed,
                     "exports": exports,
+                    "export_version": service.EXPORT_VERSION,
                     "excluded": sum(r["excluded"] for r in completed.values()),
                 }
                 task.status = "finished"
