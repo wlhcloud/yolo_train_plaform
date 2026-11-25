@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}道路调查 - {{ project.name }}{% endblock %}
+{% block extra_css %}
+<style>
+.survey-layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:20px}.survey-panel{background:#fff;border:1px solid #dee2e6;border-radius:8px;padding:18px;margin-bottom:18px}.survey-panel h2{font-size:1.1rem;margin-bottom:16px}.task-item{display:block;width:100%;text-align:left;padding:12px;border:0;border-bottom:1px solid #eee;background:white}.task-item.active{background:#eaf2ff;color:#174da0}.stream-panel{padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;margin-top:12px}.cards-row{display:grid;grid-template-columns:minmax(180px,1fr) 120px auto;gap:10px;margin-top:10px}.survey-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.survey-timeline{max-height:330px;overflow:auto}.survey-timeline th{position:sticky;top:0;background:#f0f4f8}.survey-timeline td{font-size:.85rem;white-space:nowrap}.field-grid{display:grid;grid-template-columns:repeat(4,minmax(100px,1fr));gap:12px}.mapping-grid{display:grid;grid-template-columns:repeat(3,minmax(150px,1fr));gap:10px}.survey-message{white-space:pre-wrap}.region-dialog{width:min(1450px,96vw);max-height:95vh;border:1px solid #cbd5e1;border-radius:10px;padding:18px}.region-dialog::backdrop{background:#0008}.region-canvas{width:100%;display:block;background:#101827;cursor:crosshair;touch-action:none}.region-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}.region-controls select{width:auto;max-width:420px}.status-pill{font-size:.8rem;color:#546273}.export-box{padding:12px;border:1px solid #ddd;border-radius:6px;margin:8px 0}.text-hint{font-size:.85rem;color:#637083}@media(max-width:900px){.survey-layout{grid-template-columns:1fr}.field-grid,.mapping-grid{grid-template-columns:1fr 1fr}.cards-row{grid-template-columns:1fr 100px}.cards-row .survey-toolbar{grid-column:1/-1}}
+</style>
+<style>
+#reviewDialog details thead th{position:sticky;top:0;background:#eaf0f7;z-index:1}.survey-panel,.survey-toolbar .flex-grow-1{min-width:0}.region-controls label{max-width:100%}.region-controls select{max-width:100%}
+@media(max-width:900px){main.col-10{width:100%}.row>.col-2{display:none}.cards-row{grid-template-columns:minmax(0,1fr) 100px}}
+@media(max-width:600px){.field-grid,.mapping-grid{grid-template-columns:1fr}.survey-panel{padding:12px}.survey-toolbar{align-items:stretch}.survey-toolbar>.flex-grow-1{flex-basis:100%}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="row">
+{% set current_nav_key = 'road-surveys' %}{% include "project_nav.html" %}
+<main class="col-10">
+ <div class="d-flex justify-content-between align-items-center mb-3"><div><h2 class="h4">道路调查任务</h2><div class="text-muted">方向手动填写，复用素材区域，主辅路分别计数与出表。</div></div><button id="newTask" class="btn btn-primary">新建道路任务</button></div>
+ <div id="notice" role="status" class="survey-message mb-3"></div>
+ <div id="schedulerStatus" class="text-hint mb-3" role="status"></div>
+ <div class="survey-layout">
+  <aside class="survey-panel"><h2>道路任务</h2><div id="taskList"></div><hr><label for="discoverRoot" class="form-label">从磁盘发现道路</label><input id="discoverRoot" class="form-control" value="E:/"><button id="discover" class="btn btn-outline-primary btn-sm mt-2">读取道路目录</button><div id="discovered" class="mt-2"></div></aside>
+  <section>
+   <div class="survey-panel"><h2>1. 道路信息</h2>
+    <div class="field-grid"><label>道路 / 地点名称<input class="form-control" id="roadName" required></label><label>地点编号<input class="form-control" id="spotCode"></label><label>调查日期<input class="form-control" type="date" id="surveyDate" required></label><label>系统模型<select class="form-select" id="surveyModel"><option value="best.pt">best.pt</option><option value="last.pt">last.pt</option></select></label></div>
+    <div class="mt-3"><label for="inferenceResolution" class="form-label">推理分辨率</label><select id="inferenceResolution" class="form-select" style="max-width:420px"><option value="640">640（速度优先）</option><option value="960">960（兼顾速度与细节）</option><option value="1280">1280（小目标优先）</option><option value="original">原视频尺寸（如1920×1080，最清晰）</option></select><div class="text-hint mt-1">提高输入分辨率有助于检测远处小目标，但推理更慢。原尺寸会按模型要求补边，并自动使用小批量处理。</div></div>
+    <div class="mt-3"><label for="inferenceBatchSize" class="form-label">每路推理批量</label><input id="inferenceBatchSize" class="form-control" type="number" min="0" max="64" step="1" value="0" style="max-width:220px"><div class="text-hint mt-1">0使用服务器默认；默认按显存、分辨率和并行路数选择。可手动指定1至64，显存不足时自动减小重试。</div></div>
+    <p class="text-hint mt-2 mb-0">每个任务对应一条道路。第一版按主辅路总量出表，不拆分车道；每份 Excel 只有“5分钟”Sheet。</p>
+   </div>
+   <div class="survey-panel"><h2>2. 方向、机位与卡顺序</h2><p class="text-hint">一个固定机位对应一个序列。换卡后画面不变，继续添加卡目录；画面变化或主辅路分开录像，新增机位序列并设置真实起始时间。视频按数字文件名排序，无需切割。</p><div id="directions"></div><button id="addDirection" class="btn btn-sm btn-outline-secondary mt-3">添加方向（最多两个）</button></div>
+   <div class="survey-panel"><h2>3. 车型对应</h2><p class="text-hint">模板没有“中巴车、作业车”列，请明确它们的归类；选择“不纳入模板”仍会保留过线明细。</p><div id="classMapping" class="mapping-grid"></div></div>
+   <div class="survey-panel"><h2>4. 扫描、配置区域与运行</h2>
+    <div class="survey-toolbar"><button id="saveTask" class="btn btn-outline-primary">保存配置</button><button id="scanTask" class="btn btn-primary">扫描并预览视频顺序</button><span id="saveState" class="text-hint"></span></div>
+    <div id="timeline" class="mt-3"></div>
+    <div class="form-check my-3"><input id="timelineConfirmed" type="checkbox" class="form-check-input"><label for="timelineConfirmed" class="form-check-label">已确认拍摄日期、机位画面、视频顺序、起始时间及换卡间隔。</label></div>
+    <div class="survey-toolbar"><button id="startTask" class="btn btn-success">开始调查 / 从断点继续</button><button id="rerunTask" class="btn btn-outline-secondary">全部重新运行</button><button id="stopTask" class="btn btn-outline-danger">停止任务</button><button id="liveTask" class="btn btn-primary">实时推理</button><button id="reviewTask" class="btn btn-outline-primary">抽查回放</button></div>
+    <p class="text-hint mt-2">停止时完成当前推理批次并保存帧断点；恢复时保留追踪与计数，从下一帧继续。旧任务没有帧断点时会重跑当前机位。多个道路任务按服务器配置并行运行，超出名额的任务自动排队。</p>
+    <div id="progress" role="status"></div><div id="exports"></div>
+   </div>
+  </section>
+ </div>
+</main>
+</div>
+<dialog id="regionDialog" class="region-dialog">
+ <div class="d-flex justify-content-between align-items-center"><h2 class="h5 mb-0" id="regionTitle">机位区域配置</h2><button id="closeRegion" class="btn btn-sm btn-outline-secondary">关闭</button></div>
+ <div class="region-controls"><label>核对画面 <select id="frameFile" class="form-select form-select-sm"></select></label><button id="loadFrame" class="btn btn-outline-secondary btn-sm">加载画面</button><label>区域 <select id="regionRole" class="form-select form-select-sm"><option>主路</option><option>辅路</option></select></label></div>
+ <div class="region-controls"><label>复用素材区域 <select id="materialRegionSource" class="form-select form-select-sm"></select></label><button id="importMaterialRegion" class="btn btn-primary btn-sm">导入到当前主路 / 辅路</button><label>计数方式 <select id="regionCountMode" class="form-select form-select-sm"><option value="region">进入区域计数（默认）</option><option value="line">过线计数（可选）</option></select></label></div>
+ <div class="region-controls"><button id="drawPolygon" class="btn btn-outline-primary btn-sm">① 重画区域</button><button id="finishPolygon" class="btn btn-outline-primary btn-sm">完成多边形</button><span id="optionalLineTools" hidden><button id="drawLine" class="btn btn-outline-primary btn-sm">② 重画计数线（两点）</button><button id="drawArrow" class="btn btn-outline-primary btn-sm">③ 重画通行箭头（两点）</button></span><button id="removeRegion" class="btn btn-outline-danger btn-sm">不统计此区域</button><button id="saveRegions" class="btn btn-success btn-sm">保存机位区域</button></div>
+ <p id="drawingHint" class="text-hint">可以直接导入素材中画好的主路、辅路区域；车辆底边中心进入区域时，同一追踪ID在该区域只计一次。方向名称由你手动填写，不自动判断车辆朝向。</p>
+ <canvas id="regionCanvas" class="region-canvas" width="1200" height="675"></canvas>
+</dialog>
+<dialog id="liveDialog" class="region-dialog">
+ <div class="d-flex justify-content-between align-items-center mb-2"><h2 class="h5 mb-0">实时推理</h2><button id="closeLive" class="btn btn-outline-secondary btn-sm">关闭</button></div>
+ <p id="liveStatus" class="text-hint" role="status"></p>
+ <div class="row g-3"><div class="col-lg-8"><img id="liveImage" alt="实时车辆追踪画面" style="width:100%;background:#101827;min-height:180px"><p class="text-hint mt-2">画面跟随实际推理进度，显示区域、车辆框和追踪 ID；关闭窗口不影响任务运行。右侧按模型原始车型统计，含选择“不纳入模板”的车型。</p></div><div class="col-lg-4"><h3 class="h6">当前机位各标签累计（原始车型）</h3><div style="max-height:65vh;overflow:auto"><table class="table table-sm"><thead><tr><th>车型标签</th><th>主路</th><th>辅路</th><th>合计</th></tr></thead><tbody id="liveCounts"></tbody><tfoot id="liveTotals"></tfoot></table></div></div></div>
+</dialog>
+<dialog id="reviewDialog" class="region-dialog">
+ <div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0">抽查回放 · 原速核对</h2><button id="closeReview" class="btn btn-outline-secondary btn-sm">关闭</button></div>
+ <p class="text-hint">使用已保存的模型、分辨率和区域，一次生成整条路所有方向、机位同一时段的5分钟带框视频及样板结果包，不修改正式统计。请选择整5分钟起点（如07:00、07:05），所有机位须具备该5分钟录像范围。抽查共享服务器计算名额，名额用满时会排队等待。</p>
+ <div class="field-grid mb-3"><label>参考机位（生成包含全部机位）<select id="reviewStream" class="form-select"></select></label><label>抽查起始时间<input id="reviewStart" type="datetime-local" step="1" class="form-control"></label><div class="d-flex align-items-end"><button id="generateReview" class="btn btn-primary">生成全方向5分钟抽查</button></div><div class="d-flex align-items-end"><button id="cancelReview" class="btn btn-outline-danger">取消生成</button></div></div>
+ <div id="reviewMessage" class="text-hint mb-2" role="status"></div>
+ <label class="form-label w-100">已生成 / 生成中的抽查<select id="reviewHistory" class="form-select"></select></label>
+ <div id="reviewProgress" class="text-hint my-2" role="status"></div>
+ <div id="reviewPlayerPanel" hidden><div class="survey-toolbar mb-2"><select id="reviewPlaybackPart" class="form-select form-select-sm" style="width:auto" hidden></select><label>播放速度 <select id="reviewSpeed" class="form-select form-select-sm"><option value="0.25">0.25倍速</option><option value="0.5">0.5倍速</option><option value="1" selected>1倍速（原速）</option><option value="2">2倍速</option></select></label><a id="reviewVideoDownload" class="btn btn-outline-primary btn-sm">下载带框视频</a><a id="reviewExcelDownload" class="btn btn-primary btn-sm">导出抽查样板ZIP</a><a id="reviewAuditDownload" class="btn btn-outline-secondary btn-sm">下载抽查计数明细</a></div><video id="reviewVideo" controls playsinline preload="metadata" style="width:100%;max-height:62vh;background:#101827"></video><p id="reviewCoverage" class="text-hint mt-2"></p><details class="mt-2"><summary>查看Excel“车型汇总”内容</summary><p class="text-hint">Excel包含：5分钟、车型汇总、逐车明细、抽查说明。以下预览为首个机位，保留全部原始车型；其他机位明细请查看ZIP中的抽查明细目录。</p><div style="max-height:340px;overflow:auto"><table class="table table-sm"><thead><tr><th>原始车型</th><th>模板对应</th><th>主路</th><th>辅路</th><th>合计</th></tr></thead><tbody id="reviewExcelPreview"></tbody></table></div></details></div>
+ <p class="text-hint mt-2">抽查会预热最多10秒追踪，再独立复算该时段；边界计数可能与全程统计略有差异，正式表格不会被覆盖。录像不足5分钟时只生成实际可用时长，停录处显示“无录像”。</p>
+</dialog>
+{% endblock %}
+{% block extra_js %}<script src="{{ url_for('static', filename='js/road_surveys.js', v='11') }}"></script><script src="{{ url_for('static', filename='js/road_survey_review.js', v='6') }}"></script>
+<script>window.roadSurveyApp = new RoadSurveyApp({projectId: {{ project.id }}, labels: {{ labels|tojson }}, categories: {{ categories|tojson }}, exclude: {{ exclude|tojson }}}); window.roadSurveyApp.reviewPlayer=new RoadSurveyReviewUI(window.roadSurveyApp);</script>{% endblock %}

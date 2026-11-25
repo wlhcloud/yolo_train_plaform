@@ -1,5 +1,7 @@
 import os
 import subprocess
+import threading
+from functools import wraps
 from typing import List
 import cv2
 import numpy as np
@@ -15,6 +17,17 @@ from app import font_path
 from utils import start_ffmpeg_video_save
 from managers.rtsp_threadpool_manager import rtsp_manager
 from loguru import logger as log
+
+
+_MODEL_LOAD_LOCK = threading.RLock()
+
+
+def serialized_model_load(function):
+    @wraps(function)
+    def guarded(*args, **kwargs):
+        with _MODEL_LOAD_LOCK:
+            return function(*args, **kwargs)
+    return guarded
 
 
 class InferenceManager:
@@ -322,6 +335,7 @@ class InferenceManager:
             pass
         return 0, 0
 
+    @serialized_model_load
     def load_model(
         self,
         model_type=None,
@@ -329,6 +343,7 @@ class InferenceManager:
         model_file=None,
         existing_model=None,
         model_path=None,
+        prefer_engine=True,
     ):
         """
         加载模型
@@ -380,6 +395,7 @@ class InferenceManager:
             else:
                 raise ValueError(f"不支持的模型类型: {model_type}")
 
+        original_load = None
         try:
             # 为了兼容PyTorch 2.6+，需要设置weights_only=False
             import torch
@@ -401,7 +417,7 @@ class InferenceManager:
                 log.warning("GPU不可用，使用CPU进行推理（速度较慢）")
 
             # 优先加载 TensorRT engine（仅 .pt 模型适用；engine 已是 GPU 优化版）
-            engine_path = self._try_get_engine_path(model_path)
+            engine_path = self._try_get_engine_path(model_path) if prefer_engine else None
             if engine_path is not None:
                 log.info(f"🚀 使用 TensorRT engine: {engine_path}")
                 # TensorRT engine 不能再次 .half()/.to(device)（内部已固定）
@@ -432,6 +448,9 @@ class InferenceManager:
             return model
         except Exception as e:
             raise ValueError(f"模型加载失败: {str(e)}")
+        finally:
+            if original_load is not None:
+                torch.load = original_load
 
     def inference_image(self, model, image_input):
         temp_dir = tempfile.mkdtemp()

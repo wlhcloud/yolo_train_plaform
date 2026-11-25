@@ -18,9 +18,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # 加载环境变量
 load_dotenv()
 project_task_locks = {}
-# 线程池（全局复用，控制最大并发数）
-# A100 推理单 batch 已经能吃满，多路并发会导致 context switch 和 SM 利用率碎片化
-# 单流串行推理才是最高效的，每时刻只让 1 个视频走 GPU
+# 原有素材推理队列；道路调查使用独立、可配置的并行调度器。
 MAX_WORKERS = 1
 executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 # 媒体服务器路径
@@ -92,6 +90,9 @@ def create_app():
     routes = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(routes)
     app.register_blueprint(routes.main)
+
+    from road_survey_routes import road_survey
+    app.register_blueprint(road_survey)
 
     # 添加时区处理的模板过滤器
     @app.template_filter("beijing_time")

@@ -273,6 +273,39 @@ class AnnotationTaskItem(db.Model):
         return f"<AnnotationTaskItem(id={self.id}, task_id={self.task_id}, image_id={self.image_id}, annotate_status={self.annotate_status})>"
 
 
+class RoadSurveyTask(db.Model):
+    __tablename__ = "road_survey_task"
+    __table_args__ = {"schema": "yolov8_platform"}
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("yolov8_platform.project.id"), nullable=False, index=True)
+    name = db.Column(db.String(160), nullable=False)
+    owner_host = db.Column(db.String(200), nullable=False)
+    worker_pid = db.Column(db.Integer)
+    status = db.Column(db.String(24), nullable=False, default="draft")
+    config = db.Column(db.JSON, nullable=False)
+    manifest = db.Column(db.JSON)
+    progress = db.Column(db.JSON)
+    result = db.Column(db.JSON)
+    error = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class RoadSurveyReview(db.Model):
+    __tablename__ = "road_survey_review"
+    __table_args__ = {"schema": "yolov8_platform"}
+    id = db.Column(db.String(32), primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey("yolov8_platform.road_survey_task.id"), nullable=False, index=True)
+    status = db.Column(db.String(24), nullable=False, default="queued")
+    worker_pid = db.Column(db.Integer)
+    snapshot = db.Column(db.JSON, nullable=False)
+    progress = db.Column(db.JSON)
+    result = db.Column(db.JSON)
+    error = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
 class ReasoningMaterial(db.Model):
     """
     推理素材Model（对应yolov8_platform.reasoning_materials表）

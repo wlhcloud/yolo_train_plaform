@@ -33,6 +33,10 @@
 
 {% block content %}
 <div class="container" style="max-width: 100%;">
+    <div class="alert alert-info d-flex justify-content-between align-items-center">
+        <span>多道路、分卡视频与主辅路统计，请使用道路调查任务。</span>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('road_survey.page', project_id=project.id) }}">进入道路调查</a>
+    </div>
     <div class="row">
         {% set current_nav_key = 'inference'%}
         {% include "project_nav.html"%}
