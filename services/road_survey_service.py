@@ -11,7 +11,7 @@ import os
 import re
 import subprocess
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 
 import cv2
@@ -19,7 +19,7 @@ import numpy as np
 
 VIDEO_EXTENSIONS = {".mts", ".m2ts", ".mp4", ".mov", ".avi", ".mkv", ".ts"}
 ROAD_TYPES = ("主路", "辅路")
-EXPORT_VERSION = 3
+EXPORT_VERSION = 7
 CATEGORIES = (
     "小客车",
     "出租车",
@@ -234,7 +234,9 @@ def inference_settings(config, metadata):
     requested = config.get("inference_batch_size", 0) or integer_setting(
         "ROAD_SURVEY_BATCH_SIZE", 0, 0, 64
     )
-    return size, requested or automatic_batch(size, fallback)
+    batch = requested or automatic_batch(size, fallback)
+    cap = integer_setting("ROAD_SURVEY_BATCH_CAP", 0, 0, 64)
+    return size, min(batch, cap) if cap else batch
 
 
 def config_signature(config):
@@ -484,6 +486,7 @@ def run_stream(
     resume=False,
 ):
     from boxmot import ByteTrack
+    from services.road_survey_checkpoint import compact_retired_tracks
 
     counter = RegionCounter(source["regions"], config["class_mapping"])
     tracker = ByteTrack(
@@ -514,6 +517,7 @@ def run_stream(
         buckets, coverage = restored["buckets"], restored["coverage"]
         start_file, start_frame = restored["file_index"], restored["next_frame"]
         reserve_track_ids(restored["track_id_highwater"])
+    compact_retired_tracks(tracker)
     Path(audit_path).parent.mkdir(parents=True, exist_ok=True)
     if restored and (
         not Path(audit_path).is_file()
@@ -589,6 +593,7 @@ def run_stream(
                     # Update the tracker even on empty frames so stale tracks age out.
                     boxes = result.boxes.data.detach().cpu().numpy()
                     tracks = tracker.update(boxes, result.orig_img)
+                    compact_retired_tracks(tracker)
                     second = item["start"] + count / item["fps"]
                     events = counter.consume(
                         tracks, item["width"], item["height"], second, model.names
@@ -716,6 +721,7 @@ def run_stream(
         "buckets": buckets,
         "coverage": coverage,
         "excluded": counter.excluded,
+        "label_counts": counter.label_counts,
         "audit_path": str(audit_path),
     }
 
@@ -804,129 +810,38 @@ def report_source_files(config, manifest, direction, role):
 
 
 def export_workbooks(config, manifest, completed, output_dir):
-    """Template's 21 columns and merged headers, without its historic sample values."""
-    from openpyxl import Workbook
-    from openpyxl.comments import Comment
-    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-    from openpyxl.utils import get_column_letter
+    """Export the seven sheets of the confirmed template for each direction/road type."""
+    from services.road_survey_report import build_traffic_workbook, save_cached_workbook
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     all_files = [f for stream in manifest["streams"] for f in stream["files"]]
     start = math.floor(min(f["start"] for f in all_files) / 300) * 300
     end = math.ceil(max(f["end"] for f in all_files) / 300) * 300
-    midnight = datetime.fromisoformat(config["survey_date"])
     exports = []
     for direction in config["directions"]:
+        results = [
+            value
+            for value in completed.values()
+            if value["direction"] == direction["name"]
+        ]
         for role in ROAD_TYPES:
-            source_files = report_source_files(
-                config, manifest, direction["name"], role
-            )
-            results = [
-                r for r in completed.values() if r["direction"] == direction["name"]
-            ]
+            files = report_source_files(config, manifest, direction["name"], role)
             intervals = [
                 (c["start"], c["end"])
-                for r in results
-                for c in r["coverage"]
+                for value in results
+                for c in value["coverage"]
                 if c["road_type"] == role
             ]
-            wb = Workbook()
-            ws = wb.active
-            ws.title = "5分钟"
-            headers = [
-                "编号",
-                "5分钟编号",
-                "调查日期",
-                "地点编号",
-                "地点名称",
-                "调查道路",
-                "运行方向",
-                "时段",
-                "小客车",
-                "出租车",
-                "公交车",
-                "",
-                "大货车",
-                "小货车",
-                "大客车\n(非公交)",
-                "摩托车",
-                "自行车",
-                "",
-                "",
-                "三轮车",
-                "",
-            ]
-            ws.append(headers)
-            ws.append(
-                [None] * 9
-                + ["出租车", "单机", "铰接"]
-                + [None] * 4
-                + ["电动", "普通", "外卖电动自行车", "电动", "快递货运"]
+            buckets = {}
+            for value in results:
+                for slot, counts in value["buckets"].get(role, {}).items():
+                    bucket = buckets.setdefault(slot, {})
+                    for category, count in counts.items():
+                        bucket[category] = bucket.get(category, 0) + count
+            workbook = build_traffic_workbook(
+                config, direction["name"], role, start, end, buckets, intervals, files
             )
-            for col in list(range(1, 11)) + list(range(13, 17)):
-                ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
-            for a, b in [(11, 12), (17, 19), (20, 21)]:
-                ws.merge_cells(start_row=1, start_column=a, end_row=1, end_column=b)
-            partial = 0
-            for index, slot in enumerate(range(start, end, 300), 1):
-                timestamp = midnight + timedelta(seconds=slot)
-                finish = midnight + timedelta(seconds=slot + 300)
-                values = {
-                    category: sum(
-                        r["buckets"].get(role, {}).get(str(slot), {}).get(category, 0)
-                        for r in results
-                    )
-                    for category in CATEGORIES
-                }
-                coverage = covered_seconds(intervals, slot, slot + 300)
-                complete = coverage >= 299.95
-                partial += int(not complete)
-                ws.append(
-                    [
-                        index,
-                        index,
-                        int(timestamp.strftime("%Y%m%d")),
-                        str(config.get("spot_code", "")),
-                        location_with_cards(
-                            config["road_name"], source_files, slot, slot + 300
-                        ),
-                        role,
-                        direction["name"],
-                        timestamp.strftime("%H:%M") + "-" + finish.strftime("%H:%M"),
-                        *[values[c] if coverage > 0 else None for c in CATEGORIES],
-                    ]
-                )
-                if not complete:
-                    ws.cell(index + 2, 8).comment = Comment(
-                        f"不完整时段：有效录像覆盖 {coverage:.2f}/300 秒。数值仅为已覆盖部分的观测计数，不代表完整5分钟；未覆盖留空。",
-                        "道路调查",
-                    )
-                    for cell in ws[index + 2]:
-                        cell.fill = PatternFill("solid", fgColor="FFF2CC")
-            thin = Side(style="thin", color="CBD5E1")
-            for row in ws:
-                for cell in row:
-                    cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
-                    cell.alignment = Alignment(
-                        horizontal="center", vertical="center", wrap_text=True
-                    )
-                    if cell.row <= 2:
-                        cell.font = Font(bold=True)
-                        cell.fill = PatternFill("solid", fgColor="D9E1F2")
-            for col in range(1, 22):
-                ws.column_dimensions[get_column_letter(col)].width = (
-                    10 if col >= 9 else [8, 12, 13, 12, 26, 12, 12, 18][col - 1]
-                )
-            ws.row_dimensions[1].height = 32
-            ws.freeze_panes = "I3"
-            ws.print_title_rows = "1:2"
-            ws.sheet_properties.pageSetUpPr.fitToPage = True
-            ws.page_setup.orientation = "landscape"
-            ws.page_setup.paperSize = ws.PAPERSIZE_A3
-            ws.page_setup.fitToWidth = 1
-            ws.page_setup.fitToHeight = 0
-            ws.print_options.horizontalCentered = True
             filename = (
                 safe_name(
                     f"{config['road_name']}_{direction['name']}_{role}_{config['survey_date']}"
@@ -934,20 +849,23 @@ def export_workbooks(config, manifest, completed, output_dir):
                 + ".xlsx"
             )
             path = output_dir / filename
-            temp = path.with_suffix(".tmp.xlsx")
-            wb.save(temp)
-            os.replace(temp, path)
+            temporary = path.with_suffix(".tmp.xlsx")
+            save_cached_workbook(workbook, temporary)
+            os.replace(temporary, path)
             exports.append(
                 {
                     "name": filename,
                     "path": str(path),
                     "direction": direction["name"],
                     "road_type": role,
-                    "partial_slots": partial,
-                    "total": sum(
-                        sum(r["buckets"].get(role, {}).get(str(slot), {}).values())
-                        for r in results
+                    "partial_slots": sum(
+                        covered_seconds(intervals, slot, slot + 300) < 299.95
                         for slot in range(start, end, 300)
+                    ),
+                    "total": sum(
+                        sum(counts.values())
+                        for slot, counts in buckets.items()
+                        if start <= int(slot) < end
                     ),
                 }
             )

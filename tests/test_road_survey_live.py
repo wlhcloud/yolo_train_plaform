@@ -3,10 +3,28 @@ import unittest
 import cv2
 import numpy as np
 
-from services.road_survey_live import LiveFrames, render_preview
+from services.road_survey_live import (
+    LiveFrames,
+    finish_task,
+    frames_for,
+    render_preview,
+)
 
 
 class LivePreviewTest(unittest.TestCase):
+    def test_camera_buffers_are_independent_and_finish_only_the_selected_road(self):
+        first = frames_for(999001, "0:0")
+        second = frames_for(999001, "1:0")
+        other = frames_for(999002, "0:0")
+        first.publish(b"camera-a")
+        second.publish(b"camera-b")
+        self.assertEqual(first.jpeg, b"camera-a")
+        self.assertEqual(second.jpeg, b"camera-b")
+        finish_task(999001)
+        self.assertTrue(first.done)
+        self.assertTrue(second.done)
+        self.assertFalse(other.done)
+
     def test_multipart_delivers_latest_frame_and_cleans_up_viewer(self):
         live = LiveFrames()
         stream = live.stream()

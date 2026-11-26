@@ -17,7 +17,15 @@ def integer_setting(name, default, minimum, maximum):
 
 
 def compute_workers():
+    return road_workers() * camera_workers()
+
+
+def road_workers():
     return integer_setting("ROAD_SURVEY_WORKERS", 1, 1, 8)
+
+
+def camera_workers():
+    return integer_setting("ROAD_SURVEY_CAMERA_WORKERS", 1, 1, 8)
 
 
 def cuda_lane():
@@ -29,8 +37,19 @@ def cuda_lane():
 
 
 class RoadSurveyScheduler:
-    def __init__(self, workers=None, scan_workers=2, lane_factory=cuda_lane):
-        self.workers = compute_workers() if workers is None else workers
+    def __init__(
+        self,
+        workers=None,
+        scan_workers=2,
+        lane_factory=cuda_lane,
+        roads=None,
+        cameras=None,
+    ):
+        self.road_workers = road_workers() if roads is None else roads
+        self.camera_workers = camera_workers() if cameras is None else cameras
+        self.workers = (
+            self.road_workers * self.camera_workers if workers is None else workers
+        )
         self.lane_factory = lane_factory
         self.compute = ThreadPoolExecutor(
             max_workers=self.workers, thread_name_prefix="road-gpu"
@@ -38,9 +57,12 @@ class RoadSurveyScheduler:
         self.scans = ThreadPoolExecutor(
             max_workers=scan_workers, thread_name_prefix="road-scan"
         )
+        self.control = ThreadPoolExecutor(
+            max_workers=self.road_workers, thread_name_prefix="road-control"
+        )
         self.lock = threading.Lock()
-        self.active = {"compute": 0, "scan": 0}
-        self.queued = {"compute": 0, "scan": 0}
+        self.active = {"compute": 0, "scan": 0, "control": 0}
+        self.queued = {"compute": 0, "scan": 0, "control": 0}
 
     def submit(self, kind, function, *args):
         if kind not in self.active:
@@ -60,7 +82,11 @@ class RoadSurveyScheduler:
                     self.active[kind] -= 1
 
         try:
-            future = (self.compute if kind == "compute" else self.scans).submit(execute)
+            future = {
+                "compute": self.compute,
+                "scan": self.scans,
+                "control": self.control,
+            }[kind].submit(execute)
         except Exception:
             with self.lock:
                 self.queued[kind] -= 1
@@ -78,6 +104,14 @@ class RoadSurveyScheduler:
         with self.lock:
             return {
                 "workers": self.workers,
+                "execution": os.environ.get("ROAD_SURVEY_EXECUTION", "thread"),
+                "process_batch_cap": integer_setting(
+                    "ROAD_SURVEY_PROCESS_BATCH_CAP", 32, 1, 64
+                ),
+                "road_workers": self.road_workers,
+                "camera_workers": self.camera_workers,
+                "roads_running": self.active["control"],
+                "roads_queued": self.queued["control"],
                 "running": self.active["compute"],
                 "queued": self.queued["compute"],
                 "scanning": self.active["scan"],
@@ -85,6 +119,7 @@ class RoadSurveyScheduler:
             }
 
     def shutdown(self):
+        self.control.shutdown(wait=True)
         self.compute.shutdown(wait=True)
         self.scans.shutdown(wait=True)
 

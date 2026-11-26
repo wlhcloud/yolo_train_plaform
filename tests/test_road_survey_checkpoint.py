@@ -7,7 +7,7 @@ from unittest.mock import patch
 import numpy as np
 
 from services import road_survey_service as service
-from services.road_survey_checkpoint import StreamCheckpoint
+from services.road_survey_checkpoint import StreamCheckpoint, compact_retired_tracks
 
 
 class FrameData:
@@ -72,6 +72,33 @@ class FrameCapture:
 
 
 class FrameCheckpointTest(unittest.TestCase):
+    def test_retired_track_compaction_preserves_exact_tracker_output(self):
+        from boxmot import ByteTrack
+        from boxmot.trackers.bytetrack.basetrack import BaseTrack
+
+        image = np.zeros((100, 100, 3), dtype=np.uint8)
+
+        def simulate(compact):
+            BaseTrack._count = 0
+            tracker = ByteTrack(track_buffer=2, frame_rate=25)
+            outputs = []
+            for frame in range(200):
+                boxes = (
+                    np.array([[10, 10, 30, 40, 0.95, 0]], dtype=np.float32)
+                    if frame % 10 < 5
+                    else np.empty((0, 6), dtype=np.float32)
+                )
+                outputs.append(tracker.update(boxes, image).tolist())
+                if compact:
+                    compact_retired_tracks(tracker)
+            return outputs, len(tracker.removed_stracks)
+
+        baseline, original_count = simulate(False)
+        compacted, compact_count = simulate(True)
+        self.assertEqual(compacted, baseline)
+        self.assertGreater(original_count, 10)
+        self.assertLess(compact_count, 3)
+
     def test_stop_resume_preserves_tracks_counts_and_exact_next_frame(self):
         config = {"class_mapping": {"car": "小客车"}}
         source = {"regions": {"主路": {"polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}}}

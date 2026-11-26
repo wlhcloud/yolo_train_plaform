@@ -8,7 +8,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from openpyxl import Workbook, load_workbook
+from openpyxl import Workbook
 from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -109,7 +109,7 @@ def build_road_review_zip(result, snapshot):
         )
         archive.writestr(
             "抽查说明.txt",
-            "各方向使用同一个固定5分钟时段，主路、辅路分别出表。\n本包为独立抽查复算，不替代整路正式统计。录像缺失标黄，未配置区域留空，不外推补齐。\n抽查明细目录保留各机位全部原始车型和逐车记录；带框视频在回放页面按机位下载。\n",
+            "各方向使用同一个固定5分钟时段，主路、辅路分别出表。\n本包为独立抽查复算，不替代整路正式统计。录像缺失用批注注明，未配置区域留空，不外推补齐。\n抽查明细目录保留各机位全部原始车型和逐车记录；带框视频在回放页面按机位下载。\n",
         )
     buffer.seek(0)
     return buffer
@@ -120,26 +120,56 @@ def build_review_zip(audit, snapshot):
     report = build_review_excel(audit, snapshot).getvalue()
     config = audit.get("config") or snapshot["config"]
     stream = audit.get("stream") or snapshot["stream"]
-    prefix = safe_name(f"{config['road_name']}_{stream['direction']}")
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        for role in ROAD_TYPES:
-            workbook = load_workbook(io.BytesIO(report))
-            for sheet in list(workbook):
-                if sheet.title != "5分钟":
-                    workbook.remove(sheet)
-            sheet = workbook.active
-            for row in range(sheet.max_row, 2, -1):
-                if sheet.cell(row, 6).value != role:
-                    sheet.delete_rows(row)
-            for number, row in enumerate(range(3, sheet.max_row + 1), 1):
-                sheet.cell(row, 1, number)
-            output = io.BytesIO()
-            workbook.save(output)
-            archive.writestr(
-                safe_name(f"{prefix}_{role}_{config['survey_date']}_抽查") + ".xlsx",
-                output.getvalue(),
+        config = {
+            **config,
+            "directions": [
+                {"name": stream["direction"], "streams": [snapshot["source"]]}
+            ],
+        }
+        start, end = audit["start"], audit["end"]
+        sample_files = [
+            {**item, "start": max(start, item["start"]), "end": min(end, item["end"])}
+            for item in stream.get("files", [])
+            if item["start"] < end and item["end"] > start
+        ]
+        sample_stream = {
+            **stream,
+            "direction_index": 0,
+            "stream_index": 0,
+            "files": sample_files or [{"start": start, "end": end}],
+        }
+        buckets = {}
+        for event in audit.get("events", []):
+            if (
+                not start <= event["second"] < end
+                or event.get("category") not in CATEGORIES
+            ):
+                continue
+            values = buckets.setdefault(event["road_type"], {}).setdefault(
+                str(int(event["second"] // 300) * 300), {}
             )
+            values[event["category"]] = values.get(event["category"], 0) + 1
+        completed = {
+            stream.get("key", "0:0"): {
+                "direction": stream["direction"],
+                "buckets": buckets,
+                "coverage": [
+                    {"road_type": role, "start": max(a, start), "end": min(b, end)}
+                    for a, b in audit.get("coverage", [])
+                    for role in snapshot["source"].get("regions", {})
+                    if a < end and b > start
+                ],
+            }
+        }
+        with tempfile.TemporaryDirectory(prefix="review-template-") as directory:
+            for item in export_workbooks(
+                config, {"streams": [sample_stream]}, completed, directory
+            ):
+                archive.write(
+                    item["path"], arcname=Path(item["name"]).stem + "_抽查.xlsx"
+                )
         archive.writestr("抽查汇总与逐车明细.xlsx", report)
         archive.writestr(
             "计数明细/抽查计数明细.json",
@@ -161,8 +191,8 @@ def build_review_zip(audit, snapshot):
         archive.writestr(
             "抽查说明.txt",
             "本包为所选机位、方向及时间范围的抽查样板，不是整条道路的正式结果。\n"
-            "主路、辅路模板表各一份，每份只有5分钟Sheet。未抽查的其他方向不生成表格。\n"
-            "未配置区域或无录像的时段留空；不足5分钟的时段标黄，不外推补齐。\n"
+            "主路、辅路模板表各一份，每份包含5分钟、15分钟、30分钟、1小时及对应3个断面Sheet。未抽查的其他方向不生成表格。\n"
+            "未配置区域或无录像的时段留空；不足5分钟的时段用批注注明，不外推补齐。\n"
             "汇总与逐车明细保留全部原始车型；正式模板仅计入映射车型。\n"
             "带框视频可在抽查回放页面单独下载。\n",
         )
@@ -308,8 +338,6 @@ def build_review_excel(audit, snapshot):
                 if role not in regions:
                     note += "此机位未配置该主辅路区域，留空，不作为零流量。"
                 sheet.cell(sheet.max_row, 8).comment = Comment(note, "道路调查")
-                for cell in sheet[sheet.max_row]:
-                    cell.fill = PatternFill("solid", fgColor="FFF2CC")
     style_sheet(sheet, 2)
     for col in range(1, 22):
         sheet.column_dimensions[get_column_letter(col)].width = (
@@ -428,7 +456,7 @@ def build_review_excel(audit, snapshot):
         ),
         (
             "不完整时段",
-            "黄色行与时段批注记录覆盖情况；未配置区域或完全无录像留空，不视为零流量",
+            "时段批注记录覆盖情况，不额外标黄；未配置区域或完全无录像留空，不视为零流量",
         ),
         ("车型汇总口径", "保留全部原始车型，明确列出模板对应关系及未纳入模板的数量"),
         (

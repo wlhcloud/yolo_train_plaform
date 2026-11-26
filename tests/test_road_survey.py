@@ -278,7 +278,18 @@ class RoadSurveyTest(unittest.TestCase):
             exports = service.export_workbooks(config, manifest, completed, temp)
             self.assertEqual(len(exports), 4)
             main = load_workbook(exports[0]["path"])
-            self.assertEqual(main.sheetnames, ["5分钟"])
+            self.assertEqual(
+                main.sheetnames,
+                [
+                    "5分钟",
+                    "15分钟",
+                    "30分钟",
+                    "1小时",
+                    "断面15分钟",
+                    "断面30分钟",
+                    "断面1小时",
+                ],
+            )
             sheet = main.active
             self.assertEqual(sheet.max_column, 21)
             self.assertEqual(sheet["I3"].value, 2)

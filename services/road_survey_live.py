@@ -156,8 +156,16 @@ _buffers = {}
 _buffers_lock = threading.Lock()
 
 
-def frames_for(task_id):
+def frames_for(task_id, stream=None):
+    key = (task_id, stream)
     with _buffers_lock:
-        if task_id not in _buffers:
-            _buffers[task_id] = LiveFrames()
-        return _buffers[task_id]
+        if key not in _buffers:
+            _buffers[key] = LiveFrames()
+        return _buffers[key]
+
+
+def finish_task(task_id):
+    with _buffers_lock:
+        buffers = [value for (owner, _), value in _buffers.items() if owner == task_id]
+    for buffer in buffers:
+        buffer.finish()

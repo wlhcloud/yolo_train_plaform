@@ -31,7 +31,8 @@ from models import (
     db,
 )
 from services import road_survey_service as service
-from services.road_survey_live import frames_for, render_preview
+from services.road_survey_cameras import aggregate_progress, run_cameras
+from services.road_survey_live import finish_task, frames_for, render_preview
 from services.road_survey_scheduler import get_scheduler
 
 road_survey = Blueprint("road_survey", __name__)
@@ -241,7 +242,7 @@ def schedule(task, mode, resume=False):
         app = current_app._get_current_object()
         try:
             _futures[task.id] = get_scheduler().submit(
-                "scan" if mode == "scan" else "compute",
+                "scan" if mode == "scan" else "control",
                 worker,
                 app,
                 task.id,
@@ -288,7 +289,7 @@ def stop(project_id, task_id):
                 _jobs.pop(task_id, None)
                 task.status = "stopped"
                 task.error = "已取消排队任务"
-                frames_for(task_id).finish()
+                finish_task(task_id)
             else:
                 task.status = "stopping"
             db.session.commit()
@@ -396,9 +397,13 @@ def download(project_id, task_id):
 
 @road_survey.get("/api/project/<int:project_id>/road-surveys/<int:task_id>/live")
 def live_stream(project_id, task_id):
-    task_for(project_id, task_id)
+    task = task_for(project_id, task_id)
+    streams = (task.manifest or {}).get("streams", [])
+    key = request.args.get("stream") or (streams[0]["key"] if streams else None)
+    if key is not None and not any(s["key"] == key for s in streams):
+        abort(404)
     return Response(
-        frames_for(task_id).stream(),
+        frames_for(task_id, key).stream(),
         mimetype="multipart/x-mixed-replace; boundary=frame",
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate",
@@ -754,6 +759,76 @@ def review_worker(app, review_id, stop):
             db.session.remove()
 
 
+def camera_worker(
+    app, project_id, task_id, config, stream, source, output_dir, stop, resume, report
+):
+    with app.app_context():
+        live = frames_for(task_id, stream["key"])
+
+        def check_cancel():
+            if stop.is_set():
+                raise service.Cancelled("道路任务已停止，机位断点已保存。")
+
+        def preview(*args):
+            if live.wants_frame():
+                try:
+                    live.publish(render_preview(*args))
+                except Exception:
+                    app.logger.exception("机位实时预览绘制失败，统计继续")
+
+        try:
+            check_cancel()
+            report({"phase": "loading"})
+            execution = os.environ.get("ROAD_SURVEY_EXECUTION", "thread")
+            if execution == "process":
+                from services.road_survey_process import run_camera_process
+
+                prefix = output_dir / stream["key"].replace(":", "-")
+                return run_camera_process(
+                    app,
+                    project_id,
+                    config,
+                    stream,
+                    source,
+                    prefix,
+                    stop,
+                    resume,
+                    report,
+                    live,
+                )
+            if execution != "thread":
+                raise ValueError("ROAD_SURVEY_EXECUTION 仅支持 thread 或 process")
+            from inference_manager import InferenceManager
+
+            model = InferenceManager(project_id).load_model(
+                "system", config.get("system_model", "best.pt"), prefer_engine=False
+            )
+            check_cancel()
+            missing = [
+                name
+                for name in model.names.values()
+                if not config.get("class_mapping", {}).get(name)
+            ]
+            if missing:
+                raise ValueError("请明确车型映射：" + "、".join(missing))
+            prefix = output_dir / stream["key"].replace(":", "-")
+            return service.run_stream(
+                model,
+                config,
+                stream,
+                source,
+                prefix.with_suffix(".jsonl"),
+                report,
+                check_cancel,
+                preview=preview,
+                checkpoint_path=prefix.with_suffix(".checkpoint"),
+                resume=resume,
+            )
+        finally:
+            live.finish()
+            db.session.remove()
+
+
 def worker(app, task_id, mode, stop, resume=False):
     with app.app_context():
         task = db.session.get(RoadSurveyTask, task_id)
@@ -762,13 +837,6 @@ def worker(app, task_id, mode, stop, resume=False):
         live = frames_for(task_id) if mode == "run" else None
         if live is not None:
             live.reset()
-
-        def preview(*args):
-            if live.wants_frame():
-                try:
-                    live.publish(render_preview(*args))
-                except Exception:
-                    app.logger.exception("实时预览绘制失败，统计任务继续运行")
 
         def check_cancel():
             if stop.is_set():
@@ -794,56 +862,93 @@ def worker(app, task_id, mode, stop, resume=False):
                 task.status = "ready"
                 task.progress = {"phase": "ready", "files": task.manifest["file_count"]}
             else:
-                from inference_manager import InferenceManager
-
                 task.status = "running"
                 db.session.commit()
                 service.verify_manifest(config, task.manifest)
-                model = InferenceManager(task.project_id).load_model(
-                    "system",
-                    config.get("system_model", "best.pt"),
-                    prefer_engine=False,
-                )
-                missing = [
-                    name
-                    for name in model.names.values()
-                    if not config.get("class_mapping", {}).get(name)
-                ]
-                if missing:
-                    raise ValueError(
-                        "请明确以下车型的模板映射（或选择不纳入模板）："
-                        + "、".join(missing)
-                    )
                 completed = {
                     key: value
                     for key, value in (task.result or {}).get("completed", {}).items()
                     if Path(value["audit_path"]).is_file()
                 }
                 output_dir = Path(app.instance_path) / "road_surveys" / str(task_id)
+                states = {}
                 for stream in task.manifest["streams"]:
-                    check_cancel()
-                    if stream["key"] in completed:
-                        continue
+                    value = completed.get(stream["key"])
+                    states[stream["key"]] = {
+                        "phase": "finished" if value else "queued",
+                        "direction": stream["direction"],
+                        "stream_name": stream.get("name", "机位"),
+                        "counts": sum(
+                            sum(v.values())
+                            for slots in value.get("buckets", {}).values()
+                            for v in slots.values()
+                        )
+                        if value
+                        else 0,
+                        "label_counts": value.get("label_counts", {}) if value else {},
+                    }
+                    if value is None:
+                        frames_for(task_id, stream["key"]).reset()
+
+                def publish(force=False):
+                    value = aggregate_progress(states)
+                    latest_progress[0] = value
+                    if force:
+                        task.progress = value
+                        db.session.commit()
+                        last_update[0] = time.monotonic()
+                    else:
+                        progress(value)
+
+                def report(key, value):
+                    states[key] = {**states[key], **value}
+                    publish()
+
+                def save_camera(key, value):
+                    completed[key] = value
+                    states[key] = {**states[key], "phase": "finished"}
+                    task.result = {"completed": dict(completed)}
+                    publish(force=True)
+
+                project_id = task.project_id
+
+                def run_camera(stream, report):
                     source = config["directions"][stream["direction_index"]]["streams"][
                         stream["stream_index"]
                     ]
-                    result = service.run_stream(
-                        model,
+                    return camera_worker(
+                        app,
+                        project_id,
+                        task_id,
                         config,
                         stream,
                         source,
-                        output_dir / (stream["key"].replace(":", "-") + ".jsonl"),
-                        progress,
-                        check_cancel,
-                        preview=preview,
-                        checkpoint_path=output_dir
-                        / (stream["key"].replace(":", "-") + ".checkpoint"),
-                        resume=resume,
+                        output_dir,
+                        stop,
+                        resume,
+                        report,
                     )
-                    completed[stream["key"]] = result
-                    task.progress = latest_progress[0]
-                    task.result = {"completed": completed}
-                    db.session.commit()
+
+                publish(force=True)
+                try:
+                    run_cameras(
+                        get_scheduler(),
+                        [
+                            s
+                            for s in task.manifest["streams"]
+                            if s["key"] not in completed
+                        ],
+                        run_camera,
+                        report,
+                        save_camera,
+                        stop,
+                    )
+                except service.Cancelled:
+                    for key, value in states.items():
+                        if value["phase"] != "finished":
+                            states[key] = {**value, "phase": "stopped"}
+                    publish(force=True)
+                    raise
                 check_cancel()
                 exports = service.export_workbooks(
                     config, task.manifest, completed, output_dir
@@ -874,7 +979,7 @@ def worker(app, task_id, mode, stop, resume=False):
                 app.logger.exception("道路调查任务 %s 失败", task_id)
         finally:
             if live is not None:
-                live.finish()
+                finish_task(task_id)
             with _lock:
                 _jobs.pop(task_id, None)
                 _futures.pop(task_id, None)

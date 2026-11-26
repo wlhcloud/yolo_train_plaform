@@ -10,6 +10,21 @@ from pathlib import Path
 _id_lock = threading.Lock()
 
 
+def compact_retired_tracks(tracker):
+    """ByteTrack only needs removed IDs still awaiting removal from lost_stracks.
+
+    Older retired tracks cannot be associated again, but the upstream tracker keeps
+    them forever. Keeping their histories makes every frame and snapshot slower.
+    Preserve the intersection until the next update consumes it; active/lost track
+    state and stream-wide counting deduplication are untouched.
+    """
+    if hasattr(tracker, "removed_stracks") and hasattr(tracker, "lost_stracks"):
+        pending = {track.id for track in tracker.lost_stracks}
+        tracker.removed_stracks = [
+            track for track in tracker.removed_stracks if track.id in pending
+        ]
+
+
 def reserve_track_ids(minimum=0):
     from boxmot.trackers.bytetrack.basetrack import BaseTrack
 

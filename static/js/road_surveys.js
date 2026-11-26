@@ -16,6 +16,8 @@ class RoadSurveyApp {
       ready: "待运行",
       queued: "排队中",
       running: "推理中",
+      loading: "加载模型",
+      resuming: "定位帧断点",
       scan_queued: "扫描排队",
       scanning: "扫描中",
       stopping: "正在停止",
@@ -44,6 +46,7 @@ class RoadSurveyApp {
       }
     });
     action("liveTask", () => this.openLive());
+    this.$("liveCamera").onchange = () => this.renderLive();
     this.$("closeLive").onclick = () => this.$("liveDialog").close();
     this.$("liveDialog").addEventListener("close", () => {
       this.$("liveImage").removeAttribute("src");
@@ -483,11 +486,17 @@ class RoadSurveyApp {
     this.$("progress").textContent = t
       ? `${this.states[t.status] || t.status}${t.progress?.phase === "resuming" ? " · 正在解码定位帧断点（不重复推理）" : ""}${t.progress?.files ? " · " + t.progress.files + "个视频" : ""}${t.progress?.current_file ? " · " + t.progress.current_file.split(/[\\/]/).at(-1) : ""}${t.progress?.frame ? " · " + t.progress.frame + "/" + t.progress.estimated_frames + "帧" : ""}${t.progress?.counts !== undefined ? " · 已计数 " + t.progress.counts : ""}${t.error ? "\n" + t.error : ""}`
       : "尚未保存任务";
+    const streams = Object.entries(t?.progress?.streams || {});
+    if (streams.length) {
+      const p = t.progress;
+      this.$("progress").textContent = `${this.states[t.status] || t.status} · 已完成 ${p.completed_streams}/${p.stream_count} 个机位 · 推理中 ${p.running_streams} · 排队 ${p.queued_streams} · 已计数 ${p.counts || 0}${t.error ? "\n" + t.error : ""}`;
+    }
+    this.$("cameraProgress").innerHTML = streams.map(([key, p]) => `<div class="export-box"><strong>${this.escape(p.direction || "")} / ${this.escape(p.stream_name || key)}</strong> · ${this.escape(this.states[p.phase] || p.phase)}${p.frame !== undefined ? ` · ${Number(p.frame)} / ${Number(p.estimated_frames || 0)}帧` : ""}${p.batch_size ? ` · 批量${Number(p.batch_size)}` : ""}${p.counts !== undefined ? ` · 已计数 ${Number(p.counts)}` : ""}${p.current_file ? `<div class="text-hint">${this.escape(p.current_file.split(/[\\/]/).at(-1))}</div>` : ""}</div>`).join("");
     this.$("progress").className =
       "survey-message alert " + (t?.error ? "alert-danger" : "alert-light");
     this.$("exports").innerHTML =
       t?.status === "finished"
-        ? `<a class="btn btn-primary mb-2" href="${this.base}/${t.id}/download">下载全部表格与计数明细</a><p class="text-hint">黄色行表示录像不足5分钟，单元格批注记录覆盖秒数；完全未覆盖的时段留空，不作为零流量。</p>${(t.result?.exports || []).map((e, i) => `<div class="export-box"><a href="${this.base}/${t.id}/download?index=${i}">${this.escape(e.name)}</a><div class="text-hint">已观测计数 ${e.total} · 不完整时段 ${e.partial_slots}</div></div>`).join("")}<div class="text-hint">明确排除的车型计数事件：${t.result?.excluded || 0}（明细仍保留）。</div>`
+        ? `<a class="btn btn-primary mb-2" href="${this.base}/${t.id}/download">下载全部表格与计数明细</a><p class="text-hint">每份Excel包含7个模板Sheet。汇总时段覆盖不足时，单元格批注记录覆盖秒数；完全未覆盖的时段留空，不作为零流量。</p>${(t.result?.exports || []).map((e, i) => `<div class="export-box"><a href="${this.base}/${t.id}/download?index=${i}">${this.escape(e.name)}</a><div class="text-hint">已观测计数 ${e.total} · 不完整时段 ${e.partial_slots}</div></div>`).join("")}<div class="text-hint">明确排除的车型计数事件：${t.result?.excluded || 0}（明细仍保留）。</div>`
         : "";
   }
   openLive() {
@@ -496,15 +505,21 @@ class RoadSurveyApp {
     this.renderLive();
   }
   renderLive() {
-    const task = this.task,
-      progress = task.progress || {};
-    const key = `${task.id}:${task.status}`;
+    const task = this.task;
+    const picker = this.$("liveCamera");
+    if (picker.dataset.task !== String(task.id)) {
+      picker.innerHTML = (this.manifest?.streams || []).map(s => `<option value="${this.escape(s.key)}">${this.escape(s.direction)} / ${this.escape(s.name)}</option>`).join("");
+      picker.dataset.task = String(task.id);
+    }
+    const selected = picker.value;
+    const progress = task.progress?.streams?.[selected] || task.progress || {};
+    const key = `${task.id}:${task.status}:${selected}`;
     if (this.liveStreamKey !== key) {
-      this.$("liveImage").src = `${this.base}/${task.id}/live?t=${Date.now()}`;
+      this.$("liveImage").src = `${this.base}/${task.id}/live?stream=${encodeURIComponent(selected)}&t=${Date.now()}`;
       this.liveStreamKey = key;
     }
     this.$("liveStatus").textContent =
-      `${this.states[task.status] || task.status} · ${progress.direction || ""} ${progress.stream_name || ""}${progress.current_file ? " · " + progress.current_file.split(/[\\/]/).at(-1) : ""}${task.status === "running" ? "" : " · 开始调查后显示当前处理画面"}`;
+      `${this.states[progress.phase] || this.states[task.status] || task.status} · ${progress.direction || ""} ${progress.stream_name || ""}${progress.current_file ? " · " + progress.current_file.split(/[\\/]/).at(-1) : ""}${task.status === "running" ? "" : " · 开始调查后显示当前处理画面"}`;
     const counts = progress.label_counts || {};
     const labels = [
       ...new Set([
@@ -545,7 +560,7 @@ class RoadSurveyApp {
   async refreshRuntime() {
     const { scheduler } = await this.api("/runtime");
     this.$("schedulerStatus").textContent =
-      `并行计算名额 ${scheduler.workers} · 运行中 ${scheduler.running} · 排队 ${scheduler.queued} · 扫描中 ${scheduler.scanning}。抽查共享计算名额，目录扫描使用独立队列。`;
+      `道路并发 ${scheduler.road_workers} · 每路机位并发 ${scheduler.camera_workers} · 道路运行/排队 ${scheduler.roads_running}/${scheduler.roads_queued} · ${scheduler.execution === "process" ? `独立进程（批量上限${scheduler.process_batch_cap}）` : "线程模式"} · GPU名额 ${scheduler.workers}，运行 ${scheduler.running}，排队 ${scheduler.queued}。抽查共享GPU名额，扫描使用独立队列。`;
   }
   async openRegion(key) {
     await this.save();

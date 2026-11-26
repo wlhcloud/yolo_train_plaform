@@ -62,7 +62,18 @@ class ReviewExcelTest(unittest.TestCase):
                     workbook = load_workbook(
                         io.BytesIO(archive.read(name)), data_only=True
                     )
-                    self.assertEqual(workbook.sheetnames, ["5分钟"])
+                    self.assertEqual(
+                        workbook.sheetnames,
+                        [
+                            "5分钟",
+                            "15分钟",
+                            "30分钟",
+                            "1小时",
+                            "断面15分钟",
+                            "断面30分钟",
+                            "断面1小时",
+                        ],
+                    )
                     sheet = workbook.active
                     self.assertEqual(sheet.max_row, 3)
                     self.assertEqual(sheet["H3"].value, "07:00-07:05")
